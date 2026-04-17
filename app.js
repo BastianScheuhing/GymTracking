@@ -14,12 +14,26 @@ function save() {
 }
 
 // -----------------------------
-// COLLAPSIBLE SECTIONS
+// POPUP SYSTEM
+// -----------------------------
+function openPopup(html) {
+    const overlay = document.getElementById("popupOverlay");
+    overlay.innerHTML = `<div class="popup-box">${html}</div>`;
+    overlay.style.display = "flex";
+}
+
+function closePopup() {
+    const overlay = document.getElementById("popupOverlay");
+    overlay.style.display = "none";
+    overlay.innerHTML = "";
+}
+
+// -----------------------------
+// COLLAPSIBLE
 // -----------------------------
 function toggleCollapse(id) {
     const box = document.getElementById(id);
     const arrow = document.getElementById("arrow-" + id);
-
     if (!box) return;
 
     if (box.style.display === "none") {
@@ -54,14 +68,18 @@ function renderOverview() {
     list.innerHTML = "";
     details.innerHTML = "";
 
+    if (workouts.length === 0) return;
+
     workouts.forEach((w, index) => {
         list.innerHTML += `
-            <li onclick="showWorkoutDetails(${index})">
-                <div>
+            <li>
+                <div onclick="showWorkoutDetails(${index})" style="flex:1; cursor:pointer;">
                     <strong>${w.plan}</strong><br>
                     ${w.date}
                 </div>
-                <span>${w.exercises.length} Übungen</span>
+
+                <button class="delete-btn" onclick="openWorkoutEditor(${index})">✏️</button>
+                <button class="delete-btn" onclick="deleteWorkout(${index})">🗑️</button>
             </li>
         `;
     });
@@ -70,6 +88,10 @@ function renderOverview() {
 function showWorkoutDetails(index) {
     const w = workouts[index];
     const details = document.getElementById("overviewDetails");
+
+    document.querySelectorAll("#overviewList li").forEach(li => li.classList.remove("overview-highlight"));
+    const listItem = document.querySelector(`#overviewList li:nth-child(${index + 1})`);
+    if (listItem) listItem.classList.add("overview-highlight");
 
     let html = `<h3>${w.plan} – ${w.date}</h3>`;
 
@@ -86,6 +108,100 @@ function showWorkoutDetails(index) {
     });
 
     details.innerHTML = html;
+}
+
+function deleteWorkout(i) {
+    if (!confirm("Workout wirklich löschen?")) return;
+    workouts.splice(i, 1);
+    save();
+    renderOverview();
+    document.getElementById("overviewDetails").innerHTML = "";
+}
+
+// -----------------------------
+// POPUP: WORKOUT EDITOR
+// -----------------------------
+function openWorkoutEditor(index) {
+    const w = workouts[index];
+
+    let html = `
+        <h3>Workout bearbeiten</h3>
+
+        <label>Notiz</label>
+        <textarea id="editNote" style="width:100%;height:60px;">${w.note || ""}</textarea>
+
+        <h4>Übungen</h4>
+    `;
+
+    w.exercises.forEach((ex, exIndex) => {
+        html += `
+            <div style="margin-bottom:15px; padding:10px; border:1px solid #ddd; border-radius:10px;">
+                <strong>${ex.name}</strong>
+                <button class="delete-btn" onclick="deleteExerciseFromWorkout(${index}, ${exIndex})">🗑️</button>
+
+                <ul style="margin-top:10px;">
+        `;
+
+        ex.sets.forEach((s, setIndex) => {
+            html += `
+                <li>
+                    <input type="number" id="w_${index}_ex_${exIndex}_w_${setIndex}" value="${s.weight}" style="width:60px;"> kg
+                    <input type="number" id="w_${index}_ex_${exIndex}_r_${setIndex}" value="${s.reps}" style="width:60px;"> Wdh
+                    <button class="delete-btn" onclick="deleteSetFromWorkout(${index}, ${exIndex}, ${setIndex})">×</button>
+                </li>
+            `;
+        });
+
+        html += `
+                </ul>
+
+                <button onclick="addSetToWorkout(${index}, ${exIndex})">+ Satz hinzufügen</button>
+            </div>
+        `;
+    });
+
+    html += `
+        <button onclick="saveWorkoutEditor(${index})" style="margin-top:10px;">Speichern</button>
+        <button onclick="closePopup()" style="margin-top:10px;">Abbrechen</button>
+    `;
+
+    openPopup(html);
+}
+
+function deleteExerciseFromWorkout(wIndex, exIndex) {
+    workouts[wIndex].exercises.splice(exIndex, 1);
+    save();
+    openWorkoutEditor(wIndex);
+}
+
+function deleteSetFromWorkout(wIndex, exIndex, setIndex) {
+    workouts[wIndex].exercises[exIndex].sets.splice(setIndex, 1);
+    save();
+    openWorkoutEditor(wIndex);
+}
+
+function addSetToWorkout(wIndex, exIndex) {
+    workouts[wIndex].exercises[exIndex].sets.push({ weight: 0, reps: 0 });
+    save();
+    openWorkoutEditor(wIndex);
+}
+
+function saveWorkoutEditor(wIndex) {
+    const w = workouts[wIndex];
+
+    w.note = document.getElementById("editNote").value;
+
+    w.exercises.forEach((ex, exIndex) => {
+        ex.sets = ex.sets.map((s, setIndex) => ({
+            weight: Number(document.getElementById(`w_${wIndex}_ex_${exIndex}_w_${setIndex}`).value),
+            reps: Number(document.getElementById(`w_${wIndex}_ex_${exIndex}_r_${setIndex}`).value)
+        }));
+    });
+
+    save();
+    closePopup();
+    renderOverview();
+    showWorkoutDetails(wIndex);
 }
 
 // -----------------------------
@@ -110,7 +226,7 @@ function renderCategories() {
 }
 
 function addCategory() {
-    const name = document.getElementById("newCategory").value;
+    const name = document.getElementById("newCategory").value.trim();
     if (!name) return;
     categories.push(name);
     document.getElementById("newCategory").value = "";
@@ -125,7 +241,7 @@ function deleteCategory(i) {
 }
 
 function addExercise() {
-    const name = document.getElementById("exerciseName").value;
+    const name = document.getElementById("exerciseName").value.trim();
     const category = document.getElementById("exerciseCategory").value;
     if (!name) return;
 
@@ -168,7 +284,7 @@ function renderExercises() {
 // PLÄNE
 // -----------------------------
 function createPlan() {
-    const name = document.getElementById("planName").value;
+    const name = document.getElementById("planName").value.trim();
     if (!name) return;
 
     plans.push({ name, exercises: [] });
@@ -178,6 +294,7 @@ function createPlan() {
 }
 
 function deletePlan(i) {
+    if (!confirm("Plan wirklich löschen?")) return;
     plans.splice(i, 1);
     save();
     renderPlans();
@@ -186,6 +303,7 @@ function deletePlan(i) {
 function addExerciseToPlan(planIndex) {
     const select = document.getElementById("planAdd_" + planIndex);
     const exerciseName = select.value;
+    if (!exerciseName) return;
 
     if (!plans[planIndex].exercises.includes(exerciseName)) {
         plans[planIndex].exercises.push(exerciseName);
@@ -222,10 +340,11 @@ function renderPlans() {
             .join("");
 
         list.innerHTML += `
-            <li style="flex-direction:column; align-items:flex-start;">
-                <div class="collapsible" onclick="toggleCollapse('plan_${i}')">
-                    <span>${p.name}</span>
-                    <span class="arrow" id="arrow-plan_${i}">▾</span>
+            <div class="plan-box" id="planBox_${i}">
+
+                <div class="plan-header" onclick="toggleCollapse('plan_${i}'); highlightPlan(${i});">
+                    <span class="plan-title">${p.name}</span>
+                    <button class="delete-btn" onclick="deletePlan(${i}); event.stopPropagation();">🗑️</button>
                 </div>
 
                 <div id="plan_${i}" class="collapse-content">
@@ -239,17 +358,54 @@ function renderPlans() {
                     <ul style="margin-top:10px;">
                         ${assignedExercises}
                     </ul>
-
-                    <button class="delete-btn" onclick="deletePlan(${i})" style="margin-top:10px;">
-                        Plan löschen
-                    </button>
                 </div>
-            </li>
+
+            </div>
         `;
 
         select.innerHTML += `<option value="${i}">${p.name}</option>`;
     });
+
+    // -----------------------------
+    // Nur den ersten Plan offen lassen
+    // -----------------------------
+    setTimeout(() => {
+        plans.forEach((_, i) => {
+            const content = document.getElementById("plan_" + i);
+            const box = document.getElementById("planBox_" + i);
+
+            if (i === 0) {
+                if (content) content.style.display = "block";
+                if (box) box.classList.add("active");
+            } else {
+                if (content) content.style.display = "none";
+                if (box) box.classList.remove("active");
+            }
+        });
+    }, 0);
 }
+
+
+function highlightPlan(index) {
+    const allBoxes = document.querySelectorAll(".plan-box");
+
+    allBoxes.forEach((box, i) => {
+        const content = document.getElementById("plan_" + i);
+        const arrow = document.getElementById("arrow-plan_" + i);
+
+        // Andere Pläne schließen + Highlight entfernen
+        if (i !== index) {
+            box.classList.remove("active");
+            if (content) content.style.display = "none";
+            if (arrow) arrow.innerText = "▸";
+        }
+    });
+
+    // Aktiven Plan highlighten
+    const activeBox = allBoxes[index];
+    activeBox.classList.add("active");
+}
+
 
 // -----------------------------
 // TRACKING
@@ -257,7 +413,6 @@ function renderPlans() {
 let currentTracking = null;
 let currentExerciseIndex = 0;
 
-// TIMER (Time‑Difference‑Timer)
 let timerInterval = null;
 let timerSeconds = 0;
 let timerStart = null;
@@ -333,7 +488,7 @@ function addExerciseToCurrentWorkout() {
 }
 
 // -----------------------------
-// EDIT MODE
+// EDIT MODE (Tracking)
 // -----------------------------
 function editExercise(index) {
     const ex = currentTracking.exercises[index];
@@ -420,7 +575,6 @@ function renderTracking() {
             currentTracking.startTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     }
 
-    // LETZTE ÜBUNG ABGESCHLOSSEN
     if (currentExerciseIndex >= total) {
         area.innerHTML = `
             <h3>Letzte Übung abgeschlossen</h3>
@@ -433,13 +587,9 @@ function renderTracking() {
                     ${exerciseOptions}
                 </select>
                 <button onclick="addExerciseToCurrentWorkout()" ${canAddExercise ? "" : "disabled"}>
-                    Hinzufügen
-                </button>
-            </div>
-
-            <div class="timer-box" onclick="toggleTimer()">
-                <span class="timer-icon">⏱️</span>
-                <span id="timerDisplay">${formatTime(timerSeconds)}</span>
+    			Hinzufügen
+		</button>
+                </select>
             </div>
 
             ${currentExerciseIndex > 0 ? `
@@ -515,7 +665,7 @@ function nextExercise() {
 // -------------------------------------
 function finishWorkoutPrompt() {
     const note = prompt("Optional: Notiz zum Workout hinzufügen:");
-    if (note) currentTracking.note = note;
+    if (note !== null && note.trim() !== "") currentTracking.note = note.trim();
     finishWorkout();
 }
 

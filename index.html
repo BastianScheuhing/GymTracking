@@ -4,47 +4,54 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Cache verhindern -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>Vibe App</title>
+    <title>Gym Tracking</title>
 
-    <!-- Versionierte Dateien -->
-    <link rel="stylesheet" href="style.css?v=1.0.7">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- Version oben rechts -->
-    <div id="appVersion">v1.0.7</div>
+    <!-- Popup Overlay -->
+    <div id="popupOverlay"></div>
 
-    <!-- Seiten -->
+    <!-- Version -->
+    <div id="appVersion">v1.0.8</div>
+
+    <!-- Übersicht -->
     <section id="page-overview" class="page active">
         <h2>Übersicht</h2>
         <ul id="overviewList"></ul>
         <div id="overviewDetails"></div>
     </section>
 
+    <!-- Übungen -->
     <section id="page-exercises" class="page">
         <h2>Übungen</h2>
 
-        <!-- Kategorien (collapsible) -->
+        <!-- Kategorien -->
         <div class="collapsible" onclick="toggleCollapse('catBox')">
             <span>Kategorien</span>
             <span class="arrow" id="arrow-catBox">▾</span>
         </div>
+
         <div id="catBox" class="collapse-content">
+            <h3>Neue Kategorie</h3>
             <input id="newCategory" placeholder="Neue Kategorie" />
-            <button onclick="addCategory()">Kategorie hinzufügen</button>
+            <button onclick="addCategory()">Hinzufügen</button>
+
+            <h3>Kategorien</h3>
             <ul id="categoryList"></ul>
         </div>
 
-        <!-- Alle Übungen (collapsible) -->
+        <!-- Alle Übungen -->
         <div class="collapsible" onclick="toggleCollapse('exerciseBox')">
             <span>Alle Übungen</span>
             <span class="arrow" id="arrow-exerciseBox">▾</span>
         </div>
+
         <div id="exerciseBox" class="collapse-content">
             <h3>Neue Übung</h3>
             <input id="exerciseName" placeholder="Name der Übung" />
@@ -56,6 +63,7 @@
         </div>
     </section>
 
+    <!-- Pläne -->
     <section id="page-plans" class="page">
         <h2>Trainingspläne</h2>
 
@@ -63,16 +71,12 @@
         <input id="planName" placeholder="Planname" />
         <button onclick="createPlan()">Plan erstellen</button>
 
-        <!-- Pläne (gesamt collapsible) -->
-        <div class="collapsible" onclick="toggleCollapse('planBox')">
-            <span>Pläne</span>
-            <span class="arrow" id="arrow-planBox">▾</span>
-        </div>
         <div id="planBox" class="collapse-content">
             <ul id="planList"></ul>
         </div>
     </section>
 
+    <!-- Tracking -->
     <section id="page-tracking" class="page">
         <h2>Tracking</h2>
 
@@ -84,14 +88,29 @@
         <div id="trackingArea" style="margin-top:20px;"></div>
     </section>
 
-    <!-- Bottom Navigation -->
+    <!-- Navigation -->
     <nav class="bottom-nav">
-        <button onclick="showPage('overview')" id="tab-overview">🏠<span>Übersicht</span></button>
-        <button onclick="showPage('exercises')" id="tab-exercises">🏋️<span>Übungen</span></button>
-        <button onclick="showPage('plans')" id="tab-plans">📋<span>Pläne</span></button>
-        <button onclick="showPage('tracking')" id="tab-tracking">▶️<span>Tracking</span></button>
+        <button onclick="showPage('overview')" id="tab-overview">
+            🏠
+            <span>Übersicht</span>
+        </button>
+
+        <button onclick="showPage('exercises')" id="tab-exercises">
+            🏋️
+            <span>Übungen</span>
+        </button>
+
+        <button onclick="showPage('plans')" id="tab-plans">
+            📋
+            <span>Pläne</span>
+        </button>
+
+        <button onclick="showPage('tracking')" id="tab-tracking">
+            ▶️
+            <span>Tracking</span>
+        </button>
     </nav>
 
-    <script src="app.js?v=1.0.7"></script>
+    <script src="app.js"></script>
 </body>
 </html>

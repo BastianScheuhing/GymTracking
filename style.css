@@ -18,7 +18,7 @@ h2 {
     margin-top: 0;
 }
 
-/* Version oben rechts */
+/* Version */
 #appVersion {
     position: fixed;
     top: 8px;
@@ -28,10 +28,39 @@ h2 {
     opacity: 0.7;
     z-index: 9999;
     user-select: none;
-    pointer-events: none;
 }
 
-/* Collapsible Sections */
+/* Popup Overlay */
+#popupOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.55);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+}
+
+.popup-box {
+    background: white;
+    padding: 20px;
+    border-radius: 14px;
+    width: 90%;
+    max-width: 420px;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+
+/* Highlight for opened workout */
+.overview-highlight {
+    background: #e9f0ff !important;
+    border: 1px solid #b9d0ff !important;
+}
+
+/* Collapsible */
 .collapsible {
     background: #fff;
     padding: 12px;
@@ -121,14 +150,6 @@ li {
     border-radius: 10px;
 }
 
-/* Optional Exercise Box */
-.optional-box {
-    background: #e9e9ee;
-    padding: 15px;
-    border-radius: 10px;
-    margin-top: 20px;
-}
-
 /* Note Box */
 .note-box {
     background: #fff8d1;
@@ -137,7 +158,7 @@ li {
     margin-top: 10px;
 }
 
-/* Modern Timer */
+/* Timer */
 .timer-box {
     background: #4CAF50;
     color: white;
@@ -151,12 +172,6 @@ li {
     justify-content: center;
     align-items: center;
     cursor: pointer;
-    transition: background 0.25s;
-    user-select: none;
-}
-
-.timer-box:hover {
-    background: #5ecf63;
 }
 
 .timer-icon {
@@ -164,10 +179,35 @@ li {
     margin-right: 10px;
 }
 
-/* Edit Mode */
+/* Edit Box */
 .edit-box {
     background: #fff;
     padding: 15px;
     border-radius: 10px;
     margin-top: 15px;
+}
+
+.plan-box {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 15px;
+    margin-top: 15px;
+}
+
+.plan-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.plan-title {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.plan-box.active {
+    background: #e9f0ff;
+    border: 1px solid #b9d0ff;
 }
