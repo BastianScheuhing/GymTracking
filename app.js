@@ -366,9 +366,7 @@ function renderPlans() {
         select.innerHTML += `<option value="${i}">${p.name}</option>`;
     });
 
-    // -----------------------------
     // Nur den ersten Plan offen lassen
-    // -----------------------------
     setTimeout(() => {
         plans.forEach((_, i) => {
             const content = document.getElementById("plan_" + i);
@@ -385,27 +383,21 @@ function renderPlans() {
     }, 0);
 }
 
-
 function highlightPlan(index) {
     const allBoxes = document.querySelectorAll(".plan-box");
 
     allBoxes.forEach((box, i) => {
         const content = document.getElementById("plan_" + i);
-        const arrow = document.getElementById("arrow-plan_" + i);
 
-        // Andere Pläne schließen + Highlight entfernen
         if (i !== index) {
             box.classList.remove("active");
             if (content) content.style.display = "none";
-            if (arrow) arrow.innerText = "▸";
         }
     });
 
-    // Aktiven Plan highlighten
     const activeBox = allBoxes[index];
     activeBox.classList.add("active");
 }
-
 
 // -----------------------------
 // TRACKING
@@ -488,10 +480,10 @@ function addExerciseToCurrentWorkout() {
 }
 
 // -----------------------------
-// EDIT MODE (Tracking)
+// TRACKING-POPUP EDITOR
 // -----------------------------
-function editExercise(index) {
-    const ex = currentTracking.exercises[index];
+function editTrackingExercise(exIndex) {
+    const ex = currentTracking.exercises[exIndex];
 
     let html = `<h3>${ex.name} bearbeiten</h3>`;
 
@@ -501,32 +493,42 @@ function editExercise(index) {
                 <label>Satz ${i + 1}</label><br>
                 <input id="editWeight_${i}" type="number" value="${s.weight}" /> kg
                 <input id="editReps_${i}" type="number" value="${s.reps}" /> Wdh
-                <button onclick="deleteSet(${index}, ${i})">🗑️</button>
+                <button class="delete-btn" onclick="deleteTrackingSet(${exIndex}, ${i})">🗑️</button>
             </div>
         `;
     });
 
     html += `
-        <button onclick="saveEditedExercise(${index})">Speichern</button>
-        <button onclick="renderTracking()">Abbrechen</button>
+        <button onclick="addTrackingSet(${exIndex})" style="margin-top:10px;">+ Satz hinzufügen</button>
+
+        <div style="margin-top:20px; display:flex; justify-content:space-between;">
+            <button onclick="closePopup()">Abbrechen</button>
+            <button onclick="saveTrackingExercise(${exIndex})">Speichern</button>
+        </div>
     `;
 
-    document.getElementById("trackingArea").innerHTML = html;
+    openPopup(html);
 }
 
-function deleteSet(exIndex, setIndex) {
+function deleteTrackingSet(exIndex, setIndex) {
     currentTracking.exercises[exIndex].sets.splice(setIndex, 1);
-    editExercise(exIndex);
+    editTrackingExercise(exIndex);
 }
 
-function saveEditedExercise(index) {
-    const ex = currentTracking.exercises[index];
+function addTrackingSet(exIndex) {
+    currentTracking.exercises[exIndex].sets.push({ weight: 0, reps: 0 });
+    editTrackingExercise(exIndex);
+}
+
+function saveTrackingExercise(exIndex) {
+    const ex = currentTracking.exercises[exIndex];
 
     ex.sets = ex.sets.map((s, i) => ({
         weight: Number(document.getElementById(`editWeight_${i}`).value),
         reps: Number(document.getElementById(`editReps_${i}`).value)
     }));
 
+    closePopup();
     renderTracking();
 }
 
@@ -562,7 +564,7 @@ function renderTracking() {
         .map((ex, idx) => `
             <li>
                 <strong>${ex.name}</strong>
-                <button onclick="editExercise(${idx})">✏️</button>
+                <button onclick="editTrackingExercise(${idx})">✏️</button>
                 <ul>${ex.sets.map(s => `<li>${s.weight}kg × ${s.reps}</li>`).join("")}</ul>
             </li>
         `)
@@ -587,9 +589,8 @@ function renderTracking() {
                     ${exerciseOptions}
                 </select>
                 <button onclick="addExerciseToCurrentWorkout()" ${canAddExercise ? "" : "disabled"}>
-    			Hinzufügen
-		</button>
-                </select>
+                    Hinzufügen
+                </button>
             </div>
 
             ${currentExerciseIndex > 0 ? `
@@ -700,3 +701,4 @@ function renderAll() {
 
 renderAll();
 showPage("overview");
+
