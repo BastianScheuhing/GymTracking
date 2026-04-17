@@ -14,6 +14,24 @@ function save() {
 }
 
 // -----------------------------
+// COLLAPSIBLE SECTIONS
+// -----------------------------
+function toggleCollapse(id) {
+    const box = document.getElementById(id);
+    const arrow = document.getElementById("arrow-" + id);
+
+    if (!box) return;
+
+    if (box.style.display === "none") {
+        box.style.display = "block";
+        if (arrow) arrow.innerText = "▾";
+    } else {
+        box.style.display = "none";
+        if (arrow) arrow.innerText = "▸";
+    }
+}
+
+// -----------------------------
 // NAVIGATION
 // -----------------------------
 function showPage(page) {
@@ -204,10 +222,13 @@ function renderPlans() {
             .join("");
 
         list.innerHTML += `
-            <li>
-                <div style="width:100%;">
-                    <strong>${p.name}</strong>
+            <li style="flex-direction:column; align-items:flex-start;">
+                <div class="collapsible" onclick="toggleCollapse('plan_${i}')">
+                    <span>${p.name}</span>
+                    <span class="arrow" id="arrow-plan_${i}">▾</span>
+                </div>
 
+                <div id="plan_${i}" class="collapse-content">
                     <div style="margin-top:10px;">
                         <select id="planAdd_${i}">
                             ${exerciseOptions}
@@ -218,9 +239,11 @@ function renderPlans() {
                     <ul style="margin-top:10px;">
                         ${assignedExercises}
                     </ul>
-                </div>
 
-                <button class="delete-btn" onclick="deletePlan(${i})">×</button>
+                    <button class="delete-btn" onclick="deletePlan(${i})" style="margin-top:10px;">
+                        Plan löschen
+                    </button>
+                </div>
             </li>
         `;
 
@@ -234,9 +257,10 @@ function renderPlans() {
 let currentTracking = null;
 let currentExerciseIndex = 0;
 
-// TIMER
+// TIMER (Time‑Difference‑Timer)
 let timerInterval = null;
 let timerSeconds = 0;
+let timerStart = null;
 
 function formatTime(sec) {
     const m = Math.floor(sec / 60);
@@ -248,15 +272,19 @@ function toggleTimer() {
     if (timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
+        timerStart = null;
         timerSeconds = 0;
         renderTracking();
         return;
     }
 
+    timerStart = Date.now() - timerSeconds * 1000;
+
     timerInterval = setInterval(() => {
-        timerSeconds++;
-        document.getElementById("timerDisplay").innerText = formatTime(timerSeconds);
-    }, 1000);
+        timerSeconds = Math.floor((Date.now() - timerStart) / 1000);
+        const el = document.getElementById("timerDisplay");
+        if (el) el.innerText = formatTime(timerSeconds);
+    }, 250);
 }
 
 function startTracking() {
@@ -269,6 +297,7 @@ function startTracking() {
         plan: plan.name,
         date: new Date().toISOString().split("T")[0],
         note: "",
+        startTime: new Date(),
         exercises: plan.exercises.map(name => ({
             name,
             sets: []
@@ -277,8 +306,16 @@ function startTracking() {
 
     currentExerciseIndex = 0;
     timerSeconds = 0;
+    timerStart = null;
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = null;
+
+    const startEl = document.getElementById("trackingStartTime");
+    if (startEl) {
+        startEl.innerText =
+            "Gestartet um " +
+            currentTracking.startTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
 
     renderTracking();
 }
@@ -346,13 +383,18 @@ function renderTracking() {
 
     if (!currentTracking) {
         area.innerHTML = "";
+        const startEl = document.getElementById("trackingStartTime");
+        if (startEl) startEl.innerText = "";
         return;
     }
 
     const total = currentTracking.exercises.length;
     const done = currentExerciseIndex;
 
-    // Nur Übungen anzeigen, die NICHT im Workout sind
+    if (timerStart) {
+        timerSeconds = Math.floor((Date.now() - timerStart) / 1000);
+    }
+
     const exerciseOptions = exercises
         .filter(ex => !currentTracking.exercises.some(e => e.name === ex.name))
         .map(ex => `<option value="${ex.name}">${ex.name}</option>`)
@@ -371,9 +413,14 @@ function renderTracking() {
         `)
         .join("");
 
-    // -------------------------------------
-    // LETZTE ÜBUNG
-    // -------------------------------------
+    const startEl = document.getElementById("trackingStartTime");
+    if (startEl) {
+        startEl.innerText =
+            "Gestartet um " +
+            currentTracking.startTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+
+    // LETZTE ÜBUNG ABGESCHLOSSEN
     if (currentExerciseIndex >= total) {
         area.innerHTML = `
             <h3>Letzte Übung abgeschlossen</h3>
@@ -394,6 +441,11 @@ function renderTracking() {
                 <span class="timer-icon">⏱️</span>
                 <span id="timerDisplay">${formatTime(timerSeconds)}</span>
             </div>
+
+            ${currentExerciseIndex > 0 ? `
+                <h4>Vorherige Übungen:</h4>
+                <ul>${previousExercises}</ul>
+            ` : ""}
         `;
         return;
     }
@@ -403,11 +455,6 @@ function renderTracking() {
     area.innerHTML = `
         <h3>${ex.name}</h3>
         <p>${done} von ${total} Übungen erledigt</p>
-
-        <div class="timer-box" onclick="toggleTimer()">
-            <span class="timer-icon">⏱️</span>
-            <span id="timerDisplay">${formatTime(timerSeconds)}</span>
-        </div>
 
         <label>Gewicht (kg)</label>
         <input id="trackWeight" type="number" value="${ex.sets.at(-1)?.weight ?? ''}" />
@@ -419,10 +466,17 @@ function renderTracking() {
 
         <button onclick="nextExercise()" style="margin-top:20px;">Nächste Übung</button>
 
-        <h4>Bisherige Sätze:</h4>
-        <ul>
-            ${ex.sets.map(s => `<li>${s.weight}kg × ${s.reps}</li>`).join("")}
-        </ul>
+        <div class="timer-box" onclick="toggleTimer()" style="margin-top:25px;">
+            <span class="timer-icon">⏱️</span>
+            <span id="timerDisplay">${formatTime(timerSeconds)}</span>
+        </div>
+
+        ${ex.sets.length > 0 ? `
+            <h4>Bisherige Sätze:</h4>
+            <ul>
+                ${ex.sets.map(s => `<li>${s.weight}kg × ${s.reps}</li>`).join("")}
+            </ul>
+        ` : ""}
 
         <div class="optional-box">
             <h4>Übung zum Workout hinzufügen</h4>
@@ -434,8 +488,10 @@ function renderTracking() {
             </button>
         </div>
 
-        <h4>Vorherige Übungen:</h4>
-        <ul>${previousExercises}</ul>
+        ${currentExerciseIndex > 0 ? `
+            <h4>Vorherige Übungen:</h4>
+            <ul>${previousExercises}</ul>
+        ` : ""}
     `;
 }
 
@@ -472,6 +528,10 @@ function finishWorkout() {
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = null;
     timerSeconds = 0;
+    timerStart = null;
+
+    const startEl = document.getElementById("trackingStartTime");
+    if (startEl) startEl.innerText = "";
 
     renderTracking();
     showPage("overview");

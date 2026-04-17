@@ -18,6 +18,44 @@ h2 {
     margin-top: 0;
 }
 
+/* Version oben rechts */
+#appVersion {
+    position: fixed;
+    top: 8px;
+    right: 12px;
+    font-size: 11px;
+    color: #999;
+    opacity: 0.7;
+    z-index: 9999;
+    user-select: none;
+    pointer-events: none;
+}
+
+/* Collapsible Sections */
+.collapsible {
+    background: #fff;
+    padding: 12px;
+    border-radius: 10px;
+    margin-top: 15px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    cursor: pointer;
+    border: 1px solid #ddd;
+}
+
+.collapse-content {
+    background: #fff;
+    padding: 15px;
+    border-radius: 10px;
+    margin-top: 5px;
+    border: 1px solid #ddd;
+}
+
+.arrow {
+    font-size: 16px;
+}
+
 /* Bottom Navigation */
 .bottom-nav {
     position: fixed;

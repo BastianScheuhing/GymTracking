@@ -11,10 +11,13 @@
 
     <title>Vibe App</title>
 
-    <!-- Versionierte Dateien (Cache-Busting) -->
-    <link rel="stylesheet" href="style.css?v=1.0.3">
+    <!-- Versionierte Dateien -->
+    <link rel="stylesheet" href="style.css?v=1.0.7">
 </head>
 <body>
+
+    <!-- Version oben rechts -->
+    <div id="appVersion">v1.0.7</div>
 
     <!-- Seiten -->
     <section id="page-overview" class="page active">
@@ -26,18 +29,31 @@
     <section id="page-exercises" class="page">
         <h2>Übungen</h2>
 
-        <h3>Neue Übung</h3>
-        <input id="exerciseName" placeholder="Name der Übung" />
-        <select id="exerciseCategory"></select>
-        <button onclick="addExercise()">Hinzufügen</button>
+        <!-- Kategorien (collapsible) -->
+        <div class="collapsible" onclick="toggleCollapse('catBox')">
+            <span>Kategorien</span>
+            <span class="arrow" id="arrow-catBox">▾</span>
+        </div>
+        <div id="catBox" class="collapse-content">
+            <input id="newCategory" placeholder="Neue Kategorie" />
+            <button onclick="addCategory()">Kategorie hinzufügen</button>
+            <ul id="categoryList"></ul>
+        </div>
 
-        <h3>Kategorien</h3>
-        <input id="newCategory" placeholder="Neue Kategorie" />
-        <button onclick="addCategory()">Kategorie hinzufügen</button>
-        <ul id="categoryList"></ul>
+        <!-- Alle Übungen (collapsible) -->
+        <div class="collapsible" onclick="toggleCollapse('exerciseBox')">
+            <span>Alle Übungen</span>
+            <span class="arrow" id="arrow-exerciseBox">▾</span>
+        </div>
+        <div id="exerciseBox" class="collapse-content">
+            <h3>Neue Übung</h3>
+            <input id="exerciseName" placeholder="Name der Übung" />
+            <select id="exerciseCategory"></select>
+            <button onclick="addExercise()">Hinzufügen</button>
 
-        <h3>Alle Übungen</h3>
-        <ul id="exerciseList"></ul>
+            <h3>Übungen</h3>
+            <ul id="exerciseList"></ul>
+        </div>
     </section>
 
     <section id="page-plans" class="page">
@@ -47,8 +63,14 @@
         <input id="planName" placeholder="Planname" />
         <button onclick="createPlan()">Plan erstellen</button>
 
-        <h3>Pläne</h3>
-        <ul id="planList"></ul>
+        <!-- Pläne (gesamt collapsible) -->
+        <div class="collapsible" onclick="toggleCollapse('planBox')">
+            <span>Pläne</span>
+            <span class="arrow" id="arrow-planBox">▾</span>
+        </div>
+        <div id="planBox" class="collapse-content">
+            <ul id="planList"></ul>
+        </div>
     </section>
 
     <section id="page-tracking" class="page">
@@ -57,6 +79,7 @@
         <h3>Workout starten</h3>
         <select id="trackingPlanSelect"></select>
         <button onclick="startTracking()">Starten</button>
+        <p id="trackingStartTime" style="color:#777; font-size:13px; margin-top:10px;"></p>
 
         <div id="trackingArea" style="margin-top:20px;"></div>
     </section>
@@ -69,7 +92,6 @@
         <button onclick="showPage('tracking')" id="tab-tracking">▶️<span>Tracking</span></button>
     </nav>
 
-    <!-- Versioniertes JS -->
-    <script src="app.js?v=1.0.3"></script>
+    <script src="app.js?v=1.0.7"></script>
 </body>
 </html>
