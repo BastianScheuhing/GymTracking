@@ -99,14 +99,37 @@ li {
     margin-top: 10px;
 }
 
-/* Timer */
+/* Modern Timer */
 .timer-box {
-    background: #dff7df;
-    padding: 15px;
-    border-radius: 10px;
+    background: #4CAF50;
+    color: white;
+    padding: 14px 22px;
+    border-radius: 50px;
     margin-top: 15px;
     text-align: center;
     font-size: 22px;
     font-weight: bold;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
     cursor: pointer;
+    transition: background 0.25s;
+    user-select: none;
+}
+
+.timer-box:hover {
+    background: #5ecf63;
+}
+
+.timer-icon {
+    font-size: 26px;
+    margin-right: 10px;
+}
+
+/* Edit Mode */
+.edit-box {
+    background: #fff;
+    padding: 15px;
+    border-radius: 10px;
+    margin-top: 15px;
 }

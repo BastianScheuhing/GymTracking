@@ -295,6 +295,52 @@ function addExerciseToCurrentWorkout() {
     renderTracking();
 }
 
+// -----------------------------
+// EDIT MODE
+// -----------------------------
+function editExercise(index) {
+    const ex = currentTracking.exercises[index];
+
+    let html = `<h3>${ex.name} bearbeiten</h3>`;
+
+    ex.sets.forEach((s, i) => {
+        html += `
+            <div class="edit-box">
+                <label>Satz ${i + 1}</label><br>
+                <input id="editWeight_${i}" type="number" value="${s.weight}" /> kg
+                <input id="editReps_${i}" type="number" value="${s.reps}" /> Wdh
+                <button onclick="deleteSet(${index}, ${i})">🗑️</button>
+            </div>
+        `;
+    });
+
+    html += `
+        <button onclick="saveEditedExercise(${index})">Speichern</button>
+        <button onclick="renderTracking()">Abbrechen</button>
+    `;
+
+    document.getElementById("trackingArea").innerHTML = html;
+}
+
+function deleteSet(exIndex, setIndex) {
+    currentTracking.exercises[exIndex].sets.splice(setIndex, 1);
+    editExercise(exIndex);
+}
+
+function saveEditedExercise(index) {
+    const ex = currentTracking.exercises[index];
+
+    ex.sets = ex.sets.map((s, i) => ({
+        weight: Number(document.getElementById(`editWeight_${i}`).value),
+        reps: Number(document.getElementById(`editReps_${i}`).value)
+    }));
+
+    renderTracking();
+}
+
+// -----------------------------
+// TRACKING RENDER
+// -----------------------------
 function renderTracking() {
     const area = document.getElementById("trackingArea");
 
@@ -306,22 +352,27 @@ function renderTracking() {
     const total = currentTracking.exercises.length;
     const done = currentExerciseIndex;
 
+    // Nur Übungen anzeigen, die NICHT im Workout sind
     const exerciseOptions = exercises
+        .filter(ex => !currentTracking.exercises.some(e => e.name === ex.name))
         .map(ex => `<option value="${ex.name}">${ex.name}</option>`)
         .join("");
 
+    const canAddExercise = exerciseOptions.length > 0;
+
     const previousExercises = currentTracking.exercises
         .slice(0, currentExerciseIndex)
-        .map(ex => `
+        .map((ex, idx) => `
             <li>
                 <strong>${ex.name}</strong>
+                <button onclick="editExercise(${idx})">✏️</button>
                 <ul>${ex.sets.map(s => `<li>${s.weight}kg × ${s.reps}</li>`).join("")}</ul>
             </li>
         `)
         .join("");
 
     // -------------------------------------
-    // LETZTE ÜBUNG → weitertrainieren möglich
+    // LETZTE ÜBUNG
     // -------------------------------------
     if (currentExerciseIndex >= total) {
         area.innerHTML = `
@@ -331,12 +382,17 @@ function renderTracking() {
 
             <div class="optional-box">
                 <h4>Übung zum Workout hinzufügen</h4>
-                <select id="addExerciseToWorkoutSelect">${exerciseOptions}</select>
-                <button onclick="addExerciseToCurrentWorkout()">Hinzufügen</button>
+                <select id="addExerciseToWorkoutSelect" ${canAddExercise ? "" : "disabled"}>
+                    ${exerciseOptions}
+                </select>
+                <button onclick="addExerciseToCurrentWorkout()" ${canAddExercise ? "" : "disabled"}>
+                    Hinzufügen
+                </button>
             </div>
 
             <div class="timer-box" onclick="toggleTimer()">
-                Timer: <span id="timerDisplay">${formatTime(timerSeconds)}</span>
+                <span class="timer-icon">⏱️</span>
+                <span id="timerDisplay">${formatTime(timerSeconds)}</span>
             </div>
         `;
         return;
@@ -349,7 +405,8 @@ function renderTracking() {
         <p>${done} von ${total} Übungen erledigt</p>
 
         <div class="timer-box" onclick="toggleTimer()">
-            Timer: <span id="timerDisplay">${formatTime(timerSeconds)}</span>
+            <span class="timer-icon">⏱️</span>
+            <span id="timerDisplay">${formatTime(timerSeconds)}</span>
         </div>
 
         <label>Gewicht (kg)</label>
@@ -369,8 +426,12 @@ function renderTracking() {
 
         <div class="optional-box">
             <h4>Übung zum Workout hinzufügen</h4>
-            <select id="addExerciseToWorkoutSelect">${exerciseOptions}</select>
-            <button onclick="addExerciseToCurrentWorkout()">Hinzufügen</button>
+            <select id="addExerciseToWorkoutSelect" ${canAddExercise ? "" : "disabled"}>
+                ${exerciseOptions}
+            </select>
+            <button onclick="addExerciseToCurrentWorkout()" ${canAddExercise ? "" : "disabled"}>
+                Hinzufügen
+            </button>
         </div>
 
         <h4>Vorherige Übungen:</h4>

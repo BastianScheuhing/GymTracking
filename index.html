@@ -3,8 +3,16 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Cache verhindern -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
     <title>Vibe App</title>
-    <link rel="stylesheet" href="style.css" />
+
+    <!-- Versionierte Dateien (Cache-Busting) -->
+    <link rel="stylesheet" href="style.css?v=1.0.3">
 </head>
 <body>
 
@@ -61,6 +69,7 @@
         <button onclick="showPage('tracking')" id="tab-tracking">▶️<span>Tracking</span></button>
     </nav>
 
-    <script src="app.js"></script>
+    <!-- Versioniertes JS -->
+    <script src="app.js?v=1.0.3"></script>
 </body>
 </html>
