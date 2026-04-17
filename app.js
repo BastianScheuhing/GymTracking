@@ -55,6 +55,10 @@ function showWorkoutDetails(index) {
 
     let html = `<h3>${w.plan} – ${w.date}</h3>`;
 
+    if (w.note) {
+        html += `<div class="note-box"><strong>Notiz:</strong><br>${w.note}</div>`;
+    }
+
     w.exercises.forEach(ex => {
         html += `<strong>${ex.name}</strong><ul>`;
         ex.sets.forEach(s => {
@@ -230,6 +234,31 @@ function renderPlans() {
 let currentTracking = null;
 let currentExerciseIndex = 0;
 
+// TIMER
+let timerInterval = null;
+let timerSeconds = 0;
+
+function formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function toggleTimer() {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        timerSeconds = 0;
+        renderTracking();
+        return;
+    }
+
+    timerInterval = setInterval(() => {
+        timerSeconds++;
+        document.getElementById("timerDisplay").innerText = formatTime(timerSeconds);
+    }, 1000);
+}
+
 function startTracking() {
     const planIndex = document.getElementById("trackingPlanSelect").value;
     if (planIndex === "") return;
@@ -239,6 +268,7 @@ function startTracking() {
     currentTracking = {
         plan: plan.name,
         date: new Date().toISOString().split("T")[0],
+        note: "",
         exercises: plan.exercises.map(name => ({
             name,
             sets: []
@@ -246,6 +276,10 @@ function startTracking() {
     };
 
     currentExerciseIndex = 0;
+    timerSeconds = 0;
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = null;
+
     renderTracking();
 }
 
@@ -272,12 +306,10 @@ function renderTracking() {
     const total = currentTracking.exercises.length;
     const done = currentExerciseIndex;
 
-    // Dropdown für freie Übungsauswahl
     const exerciseOptions = exercises
         .map(ex => `<option value="${ex.name}">${ex.name}</option>`)
         .join("");
 
-    // Liste bisheriger Übungen
     const previousExercises = currentTracking.exercises
         .slice(0, currentExerciseIndex)
         .map(ex => `
@@ -288,10 +320,24 @@ function renderTracking() {
         `)
         .join("");
 
+    // -------------------------------------
+    // LETZTE ÜBUNG → weitertrainieren möglich
+    // -------------------------------------
     if (currentExerciseIndex >= total) {
         area.innerHTML = `
-            <h3>Workout abgeschlossen?</h3>
-            <button onclick="finishWorkout()">Workout beenden</button>
+            <h3>Letzte Übung abgeschlossen</h3>
+
+            <button onclick="finishWorkoutPrompt()">Workout beenden</button>
+
+            <div class="optional-box">
+                <h4>Übung zum Workout hinzufügen</h4>
+                <select id="addExerciseToWorkoutSelect">${exerciseOptions}</select>
+                <button onclick="addExerciseToCurrentWorkout()">Hinzufügen</button>
+            </div>
+
+            <div class="timer-box" onclick="toggleTimer()">
+                Timer: <span id="timerDisplay">${formatTime(timerSeconds)}</span>
+            </div>
         `;
         return;
     }
@@ -302,27 +348,33 @@ function renderTracking() {
         <h3>${ex.name}</h3>
         <p>${done} von ${total} Übungen erledigt</p>
 
+        <div class="timer-box" onclick="toggleTimer()">
+            Timer: <span id="timerDisplay">${formatTime(timerSeconds)}</span>
+        </div>
+
         <label>Gewicht (kg)</label>
-        <input id="trackWeight" type="number" />
+        <input id="trackWeight" type="number" value="${ex.sets.at(-1)?.weight ?? ''}" />
 
         <label>Wiederholungen</label>
-        <input id="trackReps" type="number" />
+        <input id="trackReps" type="number" value="${ex.sets.at(-1)?.reps ?? ''}" />
 
         <button onclick="saveSet()">Satz speichern</button>
+
+        <button onclick="nextExercise()" style="margin-top:20px;">Nächste Übung</button>
 
         <h4>Bisherige Sätze:</h4>
         <ul>
             ${ex.sets.map(s => `<li>${s.weight}kg × ${s.reps}</li>`).join("")}
         </ul>
 
+        <div class="optional-box">
+            <h4>Übung zum Workout hinzufügen</h4>
+            <select id="addExerciseToWorkoutSelect">${exerciseOptions}</select>
+            <button onclick="addExerciseToCurrentWorkout()">Hinzufügen</button>
+        </div>
+
         <h4>Vorherige Übungen:</h4>
         <ul>${previousExercises}</ul>
-
-        <h4>Übung zum Workout hinzufügen</h4>
-        <select id="addExerciseToWorkoutSelect">${exerciseOptions}</select>
-        <button onclick="addExerciseToCurrentWorkout()">Hinzufügen</button>
-
-        <button onclick="nextExercise()">Nächste Übung</button>
     `;
 }
 
@@ -341,11 +393,25 @@ function nextExercise() {
     renderTracking();
 }
 
+// -------------------------------------
+// NOTIZ BEIM BEENDEN
+// -------------------------------------
+function finishWorkoutPrompt() {
+    const note = prompt("Optional: Notiz zum Workout hinzufügen:");
+    if (note) currentTracking.note = note;
+    finishWorkout();
+}
+
 function finishWorkout() {
     workouts.push(currentTracking);
     save();
     currentTracking = null;
     currentExerciseIndex = 0;
+
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = null;
+    timerSeconds = 0;
+
     renderTracking();
     showPage("overview");
 }
