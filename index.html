@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vibe – Trainingsplan</title>
+
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+    <h1>Vibe – Trainingsplan</h1>
+
+    <!-- Übungen -->
+    <section>
+        <h2>Übungen verwalten</h2>
+
+        <input id="exerciseName" placeholder="Name der Übung" />
+        <select id="exerciseCategory">
+            <option value="Brust">Brust</option>
+            <option value="Rücken">Rücken</option>
+            <option value="Beine">Beine</option>
+            <option value="Schultern">Schultern</option>
+            <option value="Arme">Arme</option>
+            <option value="Core">Core</option>
+            <option value="Sonstiges">Sonstiges</option>
+        </select>
+
+        <button onclick="addExercise()">Übung hinzufügen</button>
+
+        <ul id="exerciseList"></ul>
+    </section>
+
+    <!-- Trainingspläne -->
+    <section>
+        <h2>Trainingspläne</h2>
+
+        <input id="planName" placeholder="Name des Plans" />
+        <button onclick="createPlan()">Plan erstellen</button>
+
+        <h3>Pläne</h3>
+        <ul id="planList"></ul>
+    </section>
+
+    <!-- Workout starten -->
+    <section>
+        <h2>Workout starten</h2>
+
+        <select id="planSelect"></select>
+        <input id="workoutDate" type="date" />
+
+        <button onclick="startWorkout()">Workout starten</button>
+    </section>
+
+    <!-- Historie -->
+    <section>
+        <h2>Historie</h2>
+        <ul id="historyList"></ul>
+
+        <button onclick="deleteAllData()" class="delete-all-btn">Alles löschen</button>
+    </section>
+
+    <!-- Bottom Sheet -->
+    <div id="bottomSheet" class="sheet hidden">
+        <div class="sheet-content">
+            <h3 id="sheetTitle"></h3>
+            <p id="sheetLastSet"></p>
+
+            <label>Gewicht (kg)</label>
+            <input type="number" id="sheetWeight">
+
+            <label>Wiederholungen</label>
+            <input type="number" id="sheetReps">
+
+            <button onclick="saveSet()">Speichern</button>
+            <button onclick="skipSet()">Weiter zur nächsten Übung</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
