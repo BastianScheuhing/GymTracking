@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vibe App</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+    <!-- Seiten -->
+    <section id="page-overview" class="page active">
+        <h2>Übersicht</h2>
+        <ul id="overviewList"></ul>
+        <div id="overviewDetails"></div>
+    </section>
+
+    <section id="page-exercises" class="page">
+        <h2>Übungen</h2>
+
+        <h3>Neue Übung</h3>
+        <input id="exerciseName" placeholder="Name der Übung" />
+        <select id="exerciseCategory"></select>
+        <button onclick="addExercise()">Hinzufügen</button>
+
+        <h3>Kategorien</h3>
+        <input id="newCategory" placeholder="Neue Kategorie" />
+        <button onclick="addCategory()">Kategorie hinzufügen</button>
+        <ul id="categoryList"></ul>
+
+        <h3>Alle Übungen</h3>
+        <ul id="exerciseList"></ul>
+    </section>
+
+    <section id="page-plans" class="page">
+        <h2>Trainingspläne</h2>
+
+        <h3>Neuen Plan erstellen</h3>
+        <input id="planName" placeholder="Planname" />
+        <button onclick="createPlan()">Plan erstellen</button>
+
+        <h3>Pläne</h3>
+        <ul id="planList"></ul>
+    </section>
+
+    <section id="page-tracking" class="page">
+        <h2>Tracking</h2>
+
+        <h3>Workout starten</h3>
+        <select id="trackingPlanSelect"></select>
+        <button onclick="startTracking()">Starten</button>
+
+        <div id="trackingArea" style="margin-top:20px;"></div>
+    </section>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav">
+        <button onclick="showPage('overview')" id="tab-overview">🏠<span>Übersicht</span></button>
+        <button onclick="showPage('exercises')" id="tab-exercises">🏋️<span>Übungen</span></button>
+        <button onclick="showPage('plans')" id="tab-plans">📋<span>Pläne</span></button>
+        <button onclick="showPage('tracking')" id="tab-tracking">▶️<span>Tracking</span></button>
+    </nav>
+
+    <script src="app.js"></script>
+</body>
+</html>
