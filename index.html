@@ -11,15 +11,20 @@
 
     <!-- Version + Settings -->
     <div id="appVersion">
-        v1.0.9
+        v1.1.1
         <span id="settingsIcon" onclick="openSettingsMenu()">⚙️</span>
     </div>
 
     <!-- Navigation -->
     <div class="bottom-nav">
-        <button id="tab-overview" onclick="showPage('overview')">
-            🏠
-            <span>Übersicht</span>
+        <button id="tab-dashboard" onclick="showPage('dashboard')">
+            📊
+            <span>Dashboard</span>
+        </button>
+
+        <button id="tab-history" onclick="showPage('history')">
+            🕒
+            <span>Historie</span>
         </button>
 
         <button id="tab-exercises" onclick="showPage('exercises')">
@@ -39,9 +44,21 @@
     </div>
 
     <!-- Seiten -->
-    <!-- ÜBERSICHT -->
-    <div id="page-overview" class="page">
-        <h2>Übersicht</h2>
+
+    <!-- DASHBOARD -->
+    <div id="page-dashboard" class="page">
+        <h2>Dashboard</h2>
+
+        <h3>Insights</h3>
+        <div id="insightsBox"></div>
+
+        <h3>Historie (nach Wochen)</h3>
+        <div id="historyBox"></div>
+    </div>
+
+    <!-- HISTORIE -->
+    <div id="page-history" class="page">
+        <h2>Historie</h2>
         <ul id="overviewList"></ul>
         <div id="overviewDetails"></div>
     </div>
@@ -61,20 +78,18 @@
         </div>
 
         <!-- Alle Übungen (minimierbar) -->
-       <h3 onclick="toggleCollapse('allExBox')">
-			Alle Übungen <span id="arrow-allExBox">▾</span>
-		</h3>
+        <h3 onclick="toggleCollapse('allExBox')">
+            Alle Übungen <span id="arrow-allExBox">▾</span>
+        </h3>
+        <div id="allExBox">
 
-		<div id="allExBox">
+            <h4>Übung hinzufügen</h4>
+            <input id="exerciseName" placeholder="Übungsname">
+            <select id="exerciseCategory"></select>
+            <button onclick="addExercise()">Hinzufügen</button>
 
-			<h4>Übung hinzufügen</h4>
-			<input id="exerciseName" placeholder="Übungsname">
-			<select id="exerciseCategory"></select>
-			<button onclick="addExercise()">Hinzufügen</button>
-
-			<ul id="exerciseList"></ul>
-		</div>
-
+            <ul id="exerciseList"></ul>
+        </div>
     </div>
 
     <!-- PLÄNE -->

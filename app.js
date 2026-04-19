@@ -1,10 +1,16 @@
-// -----------------------------
+// ---------------------------------------------------------
+// VERSION
+// ---------------------------------------------------------
+const APP_VERSION = "1.1.1";
+
+// ---------------------------------------------------------
 // DATA
-// -----------------------------
+// ---------------------------------------------------------
 let categories = JSON.parse(localStorage.getItem("categories")) || ["Brust", "Rücken", "Beine"];
 let exercises = JSON.parse(localStorage.getItem("exercises")) || [];
 let plans = JSON.parse(localStorage.getItem("plans")) || [];
 let workouts = JSON.parse(localStorage.getItem("workouts")) || [];
+let progressionCollapsed = {}; // { "Bankdrücken": true/false }
 
 function save() {
     localStorage.setItem("categories", JSON.stringify(categories));
@@ -13,9 +19,9 @@ function save() {
     localStorage.setItem("workouts", JSON.stringify(workouts));
 }
 
-// -----------------------------
+// ---------------------------------------------------------
 // POPUP SYSTEM
-// -----------------------------
+// ---------------------------------------------------------
 function openPopup(html) {
     const overlay = document.getElementById("popupOverlay");
     overlay.innerHTML = `<div class="popup-box">${html}</div>`;
@@ -28,9 +34,9 @@ function closePopup() {
     overlay.innerHTML = "";
 }
 
-// -----------------------------
+// ---------------------------------------------------------
 // COLLAPSIBLE
-// -----------------------------
+// ---------------------------------------------------------
 function toggleCollapse(id) {
     const box = document.getElementById(id);
     const arrow = document.getElementById("arrow-" + id);
@@ -45,9 +51,9 @@ function toggleCollapse(id) {
     }
 }
 
-// -----------------------------
+// ---------------------------------------------------------
 // NAVIGATION
-// -----------------------------
+// ---------------------------------------------------------
 function showPage(page) {
     document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
     document.getElementById("page-" + page).classList.add("active");
@@ -55,13 +61,14 @@ function showPage(page) {
     document.querySelectorAll(".bottom-nav button").forEach(b => b.classList.remove("active"));
     document.getElementById("tab-" + page).classList.add("active");
 
-    renderAll();
+    if (page === "dashboard") renderDashboard();
+    else renderAll();
 }
 
-// -----------------------------
-// ÜBERSICHT
-// -----------------------------
-function renderOverview() {
+// ---------------------------------------------------------
+// HISTORIE (früher Übersicht)
+// ---------------------------------------------------------
+function renderHistory() {
     const list = document.getElementById("overviewList");
     const details = document.getElementById("overviewDetails");
 
@@ -114,13 +121,13 @@ function deleteWorkout(i) {
     if (!confirm("Workout wirklich löschen?")) return;
     workouts.splice(i, 1);
     save();
-    renderOverview();
+    renderHistory();
     document.getElementById("overviewDetails").innerHTML = "";
 }
 
-// -----------------------------
+// ---------------------------------------------------------
 // POPUP: WORKOUT EDITOR
-// -----------------------------
+// ---------------------------------------------------------
 function openWorkoutEditor(index) {
     const w = workouts[index];
 
@@ -200,13 +207,13 @@ function saveWorkoutEditor(wIndex) {
 
     save();
     closePopup();
-    renderOverview();
+    renderHistory();
     showWorkoutDetails(wIndex);
 }
 
-// -----------------------------
+// ---------------------------------------------------------
 // ÜBUNGEN
-// -----------------------------
+// ---------------------------------------------------------
 function renderCategories() {
     const list = document.getElementById("categoryList");
     const select = document.getElementById("exerciseCategory");
@@ -280,9 +287,9 @@ function renderExercises() {
     });
 }
 
-// -----------------------------
+// ---------------------------------------------------------
 // PLÄNE
-// -----------------------------
+// ---------------------------------------------------------
 function createPlan() {
     const name = document.getElementById("planName").value.trim();
     if (!name) return;
@@ -398,9 +405,9 @@ function highlightPlan(index) {
     activeBox.classList.add("active");
 }
 
-// -----------------------------
+// ---------------------------------------------------------
 // TRACKING
-// -----------------------------
+// ---------------------------------------------------------
 let currentTracking = null;
 let currentExerciseIndex = 0;
 
@@ -478,9 +485,9 @@ function addExerciseToCurrentWorkout() {
     renderTracking();
 }
 
-// -----------------------------
+// ---------------------------------------------------------
 // TRACKING-POPUP EDITOR
-// -----------------------------
+// ---------------------------------------------------------
 function editTrackingExercise(exIndex) {
     const ex = currentTracking.exercises[exIndex];
 
@@ -531,9 +538,9 @@ function saveTrackingExercise(exIndex) {
     renderTracking();
 }
 
-// -----------------------------
+// ---------------------------------------------------------
 // TRACKING RENDER
-// -----------------------------
+// ---------------------------------------------------------
 function renderTracking() {
     const area = document.getElementById("trackingArea");
 
@@ -660,9 +667,9 @@ function nextExercise() {
     renderTracking();
 }
 
-// -------------------------------------
-// NOTIZ BEIM BEENDEN
-// -------------------------------------
+// ---------------------------------------------------------
+// WORKOUT FINISH
+// ---------------------------------------------------------
 function finishWorkoutPrompt() {
     const note = prompt("Optional: Notiz zum Workout hinzufügen:");
     if (note !== null && note.trim() !== "") currentTracking.note = note.trim();
@@ -684,27 +691,279 @@ function finishWorkout() {
     if (startEl) startEl.innerText = "";
 
     renderTracking();
-    showPage("overview");
+    showPage("history");
 }
 
-// -----------------------------
-// RENDER ALL
-// -----------------------------
-function renderAll() {
-    renderOverview();
-    renderCategories();
-    renderExercises();
-    renderPlans();
-    renderTracking();
+// ---------------------------------------------------------
+// DASHBOARD – WEEK CALCULATION
+// ---------------------------------------------------------
+function getISOWeek(date) {
+    const d = new Date(date);
+    d.setHours(0,0,0,0);
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+    const yearStart = new Date(d.getFullYear(), 0, 1);
+    const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    return { year: d.getFullYear(), week: weekNo };
 }
 
-renderAll();
-showPage("overview");
+function groupWorkoutsByWeek() {
+    const groups = {};
+
+    workouts.forEach(w => {
+        const { year, week } = getISOWeek(w.date);
+        const key = `${year}-KW${week}`;
+
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(w);
+    });
+
+    return groups;
+}
 
 // ---------------------------------------------------------
-// VERSION
+// DASHBOARD – PROGRESSION VERSION C
 // ---------------------------------------------------------
-const APP_VERSION = "1.0.9";
+function getExerciseProgression() {
+    const map = {};
+
+    workouts.forEach(w => {
+        w.exercises.forEach(ex => {
+            if (!map[ex.name]) map[ex.name] = [];
+
+            if (ex.sets.length > 0) {
+                const avg =
+                    ex.sets.reduce((sum, s) => sum + s.weight, 0) / ex.sets.length;
+
+                map[ex.name].push(avg);
+            }
+        });
+    });
+
+    const result = [];
+
+    Object.keys(map).forEach(name => {
+        const arr = map[name];
+        if (arr.length < 2) return;
+
+        const last = arr[arr.length - 1];
+        const prev = arr[arr.length - 2];
+
+        let avgDiff = 0;
+        if (arr.length > 1) {
+            let sum = 0;
+            for (let i = 1; i < arr.length; i++) {
+                sum += arr[i] - arr[i - 1];
+            }
+            avgDiff = sum / (arr.length - 1);
+        }
+
+        result.push({
+            name,
+            lastIncrease: last - prev,
+            avgIncrease: avgDiff,
+            lastAvg: last,
+            prevAvg: prev,
+            count: arr.length,
+            values: arr
+        });
+    });
+
+    return result;
+}
+
+// ---------------------------------------------------------
+// MINI-CHART RENDERER
+// ---------------------------------------------------------
+function drawMiniChart(canvasId, values) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+
+    if (values.length < 2) {
+        ctx.fillStyle = "#ccc";
+        ctx.fillRect(0, h / 2, w, 2);
+        return;
+    }
+
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+
+    ctx.strokeStyle = "#007aff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+
+    values.forEach((v, i) => {
+        const x = (i / (values.length - 1)) * w;
+        const y = h - ((v - min) / range) * h;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+
+    ctx.stroke();
+}
+
+function toggleProgression(name) {
+    progressionCollapsed[name] = !progressionCollapsed[name];
+    renderInsights(); // neu rendern
+}
+
+// ---------------------------------------------------------
+// DASHBOARD – INSIGHTS
+// ---------------------------------------------------------
+function getWorkoutsThisWeek() {
+    const now = new Date();
+    const { year, week } = getISOWeek(now);
+
+    return workouts.filter(w => {
+        const wInfo = getISOWeek(w.date);
+        return wInfo.year === year && wInfo.week === week;
+    });
+}
+
+function getWorkoutsLastWeek() {
+    const now = new Date();
+    const { year, week } = getISOWeek(now);
+
+    return workouts.filter(w => {
+        const wInfo = getISOWeek(w.date);
+        return wInfo.year === year && wInfo.week === week - 1;
+    });
+}
+
+function getWeeklyComparison() {
+    const thisWeek = getWorkoutsThisWeek().length;
+    const lastWeek = getWorkoutsLastWeek().length;
+
+    if (thisWeek === 0 && lastWeek === 0)
+        return "Noch keine Daten vorhanden";
+
+    if (thisWeek > lastWeek)
+        return `+${thisWeek - lastWeek} Trainings mehr als letzte Woche`;
+
+    if (thisWeek < lastWeek)
+        return `${lastWeek - thisWeek} Trainings weniger als letzte Woche`;
+
+    return "Gleich viele Trainings wie letzte Woche";
+}
+
+function renderInsights() {
+    const box = document.getElementById("insightsBox");
+
+    if (workouts.length === 0) {
+        box.innerHTML = `<p>Noch keine Insights verfügbar.</p>`;
+        return;
+    }
+
+    const thisWeek = getWorkoutsThisWeek().length;
+    const comparison = getWeeklyComparison();
+    const progression = getExerciseProgression();
+
+    box.innerHTML = `
+        <div class="insight-card">
+            <h3>Trainings diese Woche</h3>
+            <p>${thisWeek}</p>
+        </div>
+
+        <div class="insight-card">
+            <h3>Vergleich zu letzter Woche</h3>
+            <p>${comparison}</p>
+        </div>
+
+        <div class="insight-card">
+            <h3>Progression</h3>
+            ${
+                progression.length === 0
+                ? "<p>Noch keine Progression messbar</p>"
+                : progression.map((p, idx) => {
+
+                    // Default collapse state
+                    if (progressionCollapsed[p.name] === undefined) {
+                        progressionCollapsed[p.name] = false; // false = ausgeklappt
+                    }
+
+                    const collapsed = progressionCollapsed[p.name];
+
+                    return `
+                        <div class="progression-item" style="margin-bottom:15px;">
+
+                            <h4 onclick="toggleProgression('${p.name}')"
+                                style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+                                <span>${p.name}</span>
+                                <span>${collapsed ? "▸" : "▾"}</span>
+                            </h4>
+
+                            <div id="prog_${p.name}" style="display:${collapsed ? "none" : "block"};">
+                                Letzte Steigerung: ${p.lastIncrease > 0 ? "+" : ""}${p.lastIncrease.toFixed(1)} kg<br>
+                                Durchschnittliche Steigerung: ${p.avgIncrease > 0 ? "+" : ""}${p.avgIncrease.toFixed(1)} kg<br>
+                                (${p.count} Workouts)
+
+                                <canvas id="chart_${idx}" width="200" height="40" style="margin-top:6px;"></canvas>
+                            </div>
+
+                        </div>
+                    `;
+                }).join("")
+            }
+        </div>
+    `;
+
+    // Charts zeichnen
+    progression.forEach((p, idx) => {
+        if (!progressionCollapsed[p.name]) {
+            drawMiniChart(`chart_${idx}`, p.values);
+        }
+    });
+}
+
+// ---------------------------------------------------------
+// DASHBOARD – HISTORY (WEEK GROUPING)
+// ---------------------------------------------------------
+function renderHistoryGrouped() {
+    const box = document.getElementById("historyBox");
+
+    if (workouts.length === 0) {
+        box.innerHTML = `<p>Noch keine Workouts gespeichert.</p>`;
+        return;
+    }
+
+    const groups = groupWorkoutsByWeek();
+    const keys = Object.keys(groups).sort().reverse();
+
+    box.innerHTML = keys.map(key => {
+        const list = groups[key];
+
+        return `
+            <div class="week-box">
+                <h3 onclick="toggleCollapse('${key}')">
+                    ${key} <span id="arrow-${key}">▾</span>
+                </h3>
+
+                <div id="${key}">
+                    ${list.map(w => `
+                        <div class="history-entry">
+                            <strong>${w.plan}</strong> – ${w.date}
+                        </div>
+                    `).join("")}
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+// ---------------------------------------------------------
+// DASHBOARD – MAIN RENDER
+// ---------------------------------------------------------
+function renderDashboard() {
+    renderInsights();
+    renderHistoryGrouped();
+}
+
 // ---------------------------------------------------------
 // BACKUP-CENTER POPUP
 // ---------------------------------------------------------
@@ -752,7 +1011,6 @@ function openSettingsMenu() {
 
         <h3>⚙️ System</h3>
         <p>App-Version: ${APP_VERSION}</p>
-        <p>Datenbank-Version: ${APP_VERSION}</p>
 
         <button onclick="closePopup()" style="margin-top:20px;">Schließen</button>
     `;
@@ -979,3 +1237,18 @@ function downloadCSV(text, filename) {
 
     URL.revokeObjectURL(url);
 }
+
+// ---------------------------------------------------------
+// RENDER ALL
+// ---------------------------------------------------------
+function renderAll() {
+    renderHistory();
+    renderCategories();
+    renderExercises();
+    renderPlans();
+    renderTracking();
+}
+
+// Initial Page
+renderAll();
+showPage("dashboard");
