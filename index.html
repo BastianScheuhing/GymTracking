@@ -1,115 +1,107 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gym Tracking</title>
 
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- Popup Overlay -->
-    <div id="popupOverlay"></div>
-
-    <!-- Version -->
-    <div id="appVersion">v1.0.8</div>
-
-    <!-- Übersicht -->
-    <section id="page-overview" class="page active">
-        <h2>Übersicht</h2>
-        <ul id="overviewList"></ul>
-        <div id="overviewDetails"></div>
-    </section>
-
-    <!-- Übungen -->
-    <section id="page-exercises" class="page">
-        <h2>Übungen</h2>
-
-        <!-- Kategorien -->
-        <div class="collapsible" onclick="toggleCollapse('catBox')">
-            <span>Kategorien</span>
-            <span class="arrow" id="arrow-catBox">▾</span>
-        </div>
-
-        <div id="catBox" class="collapse-content">
-            <h3>Neue Kategorie</h3>
-            <input id="newCategory" placeholder="Neue Kategorie" />
-            <button onclick="addCategory()">Hinzufügen</button>
-
-            <h3>Kategorien</h3>
-            <ul id="categoryList"></ul>
-        </div>
-
-        <!-- Alle Übungen -->
-        <div class="collapsible" onclick="toggleCollapse('exerciseBox')">
-            <span>Alle Übungen</span>
-            <span class="arrow" id="arrow-exerciseBox">▾</span>
-        </div>
-
-        <div id="exerciseBox" class="collapse-content">
-            <h3>Neue Übung</h3>
-            <input id="exerciseName" placeholder="Name der Übung" />
-            <select id="exerciseCategory"></select>
-            <button onclick="addExercise()">Hinzufügen</button>
-
-            <h3>Übungen</h3>
-            <ul id="exerciseList"></ul>
-        </div>
-    </section>
-
-    <!-- Pläne -->
-    <section id="page-plans" class="page">
-        <h2>Trainingspläne</h2>
-
-        <h3>Neuen Plan erstellen</h3>
-        <input id="planName" placeholder="Planname" />
-        <button onclick="createPlan()">Plan erstellen</button>
-
-        <div id="planBox" class="collapse-content">
-            <ul id="planList"></ul>
-        </div>
-    </section>
-
-    <!-- Tracking -->
-    <section id="page-tracking" class="page">
-        <h2>Tracking</h2>
-
-        <h3>Workout starten</h3>
-        <select id="trackingPlanSelect"></select>
-        <button onclick="startTracking()">Starten</button>
-        <p id="trackingStartTime" style="color:#777; font-size:13px; margin-top:10px;"></p>
-
-        <div id="trackingArea" style="margin-top:20px;"></div>
-    </section>
+    <!-- Version + Settings -->
+    <div id="appVersion">
+        v1.0.9
+        <span id="settingsIcon" onclick="openSettingsMenu()">⚙️</span>
+    </div>
 
     <!-- Navigation -->
-    <nav class="bottom-nav">
-        <button onclick="showPage('overview')" id="tab-overview">
+    <div class="bottom-nav">
+        <button id="tab-overview" onclick="showPage('overview')">
             🏠
             <span>Übersicht</span>
         </button>
 
-        <button onclick="showPage('exercises')" id="tab-exercises">
+        <button id="tab-exercises" onclick="showPage('exercises')">
             🏋️
             <span>Übungen</span>
         </button>
 
-        <button onclick="showPage('plans')" id="tab-plans">
+        <button id="tab-plans" onclick="showPage('plans')">
             📋
             <span>Pläne</span>
         </button>
 
-        <button onclick="showPage('tracking')" id="tab-tracking">
-            ▶️
+        <button id="tab-tracking" onclick="showPage('tracking')">
+            ⏱️
             <span>Tracking</span>
         </button>
-    </nav>
+    </div>
+
+    <!-- Seiten -->
+    <!-- ÜBERSICHT -->
+    <div id="page-overview" class="page">
+        <h2>Übersicht</h2>
+        <ul id="overviewList"></ul>
+        <div id="overviewDetails"></div>
+    </div>
+
+    <!-- ÜBUNGEN -->
+    <div id="page-exercises" class="page">
+        <h2>Übungen</h2>
+
+        <!-- Kategorien (minimierbar) -->
+        <h3 onclick="toggleCollapse('catBox')">
+            Kategorien <span id="arrow-catBox">▾</span>
+        </h3>
+        <div id="catBox">
+            <input id="newCategory" placeholder="Neue Kategorie">
+            <button onclick="addCategory()">Hinzufügen</button>
+            <ul id="categoryList"></ul>
+        </div>
+
+        <!-- Alle Übungen (minimierbar) -->
+       <h3 onclick="toggleCollapse('allExBox')">
+			Alle Übungen <span id="arrow-allExBox">▾</span>
+		</h3>
+
+		<div id="allExBox">
+
+			<h4>Übung hinzufügen</h4>
+			<input id="exerciseName" placeholder="Übungsname">
+			<select id="exerciseCategory"></select>
+			<button onclick="addExercise()">Hinzufügen</button>
+
+			<ul id="exerciseList"></ul>
+		</div>
+
+    </div>
+
+    <!-- PLÄNE -->
+    <div id="page-plans" class="page">
+        <h2>Trainingspläne</h2>
+
+        <input id="planName" placeholder="Planname">
+        <button onclick="createPlan()">Plan erstellen</button>
+
+        <div id="planList"></div>
+    </div>
+
+    <!-- TRACKING -->
+    <div id="page-tracking" class="page">
+        <h2>Workout Tracking</h2>
+
+        <label>Plan auswählen:</label>
+        <select id="trackingPlanSelect"></select>
+        <button onclick="startTracking()">Starten</button>
+
+        <p id="trackingStartTime"></p>
+
+        <div id="trackingArea"></div>
+    </div>
+
+    <!-- Popup Overlay -->
+    <div id="popupOverlay" class="popup-overlay"></div>
 
     <script src="app.js"></script>
 </body>

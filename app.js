@@ -366,7 +366,6 @@ function renderPlans() {
         select.innerHTML += `<option value="${i}">${p.name}</option>`;
     });
 
-    // Nur den ersten Plan offen lassen
     setTimeout(() => {
         plans.forEach((_, i) => {
             const content = document.getElementById("plan_" + i);
@@ -702,3 +701,281 @@ function renderAll() {
 renderAll();
 showPage("overview");
 
+// ---------------------------------------------------------
+// VERSION
+// ---------------------------------------------------------
+const APP_VERSION = "1.0.9";
+// ---------------------------------------------------------
+// BACKUP-CENTER POPUP
+// ---------------------------------------------------------
+function openSettingsMenu() {
+    const html = `
+        <h2>Backup & Import – v${APP_VERSION}</h2>
+
+        <h3>📦 Gesamte Datenbank</h3>
+        <button onclick="exportAll()">📤 Alles exportieren (JSON)</button>
+        <input type="file" accept="application/json" onchange="importAll(event)" />
+
+        <hr>
+
+        <h3>📤 Einzel-Export</h3>
+        <strong>Trainingspläne:</strong><br>
+        ${plans.map((p, i) => `
+            <button onclick="exportSinglePlan(${i})">${p.name}</button>
+        `).join("")}
+
+        <br><br>
+        <strong>Übungen:</strong><br>
+        ${exercises.map((ex, i) => `
+            <button onclick="exportSingleExercise(${i})">${ex.name}</button>
+        `).join("")}
+
+        <br><br>
+        <strong>Workouts:</strong><br>
+        ${workouts.map((w, i) => `
+            <button onclick="exportSingleWorkout(${i})">${w.plan} – ${w.date}</button>
+        `).join("")}
+
+        <hr>
+
+        <h3>📥 Einzel-Import</h3>
+        <input type="file" accept="application/json" onchange="importSingle(event)" />
+
+        <hr>
+
+        <h3>📊 CSV-Export</h3>
+        <button onclick="exportCSVWorkouts()">Workouts.csv</button>
+        <button onclick="exportCSVExercises()">Exercises.csv</button>
+        <button onclick="exportCSVPlans()">Plans.csv</button>
+
+        <hr>
+
+        <h3>⚙️ System</h3>
+        <p>App-Version: ${APP_VERSION}</p>
+        <p>Datenbank-Version: ${APP_VERSION}</p>
+
+        <button onclick="closePopup()" style="margin-top:20px;">Schließen</button>
+    `;
+
+    openPopup(html);
+}
+
+// ---------------------------------------------------------
+// EXPORT: ALLES
+// ---------------------------------------------------------
+function exportAll() {
+    const data = {
+        version: APP_VERSION,
+        categories,
+        exercises,
+        plans,
+        workouts
+    };
+
+    downloadJSON(data, "backup-all-v" + APP_VERSION + ".json");
+}
+
+function downloadJSON(obj, filename) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+
+    URL.revokeObjectURL(url);
+}
+
+// ---------------------------------------------------------
+// IMPORT: ALLES
+// ---------------------------------------------------------
+function importAll(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            let data = JSON.parse(e.target.result);
+
+            data = migrateData(data);
+
+            mergeCategories(data.categories);
+            mergeExercises(data.exercises);
+            mergePlans(data.plans);
+            mergeWorkouts(data.workouts);
+
+            save();
+            renderAll();
+            alert("Alle Daten erfolgreich importiert!");
+        } catch {
+            alert("Ungültige Datei!");
+        }
+    };
+
+    reader.readAsText(file);
+}
+
+// ---------------------------------------------------------
+// MIGRATIONSSYSTEM
+// ---------------------------------------------------------
+function migrateData(data) {
+    if (!data.version) data.version = "1.0.0";
+
+    if (data.version === "1.0.0") {
+        data.workouts.forEach(w =>
+            w.exercises.forEach(ex =>
+                ex.sets = ex.sets.map(s => ({
+                    weight: s.weight,
+                    reps: s.reps,
+                    rir: null
+                }))
+            )
+        );
+        data.version = "1.0.1";
+    }
+
+    return data;
+}
+
+// ---------------------------------------------------------
+// KONFLIKTLÖSUNG
+// ---------------------------------------------------------
+function mergeCategories(imported) {
+    imported.forEach(cat => {
+        if (!categories.includes(cat)) categories.push(cat);
+    });
+}
+
+function mergeExercises(imported) {
+    imported.forEach(ex => {
+        if (!exercises.some(e => e.name === ex.name)) {
+            exercises.push(ex);
+        }
+    });
+}
+
+function mergePlans(imported) {
+    imported.forEach(p => {
+        const existing = plans.find(pl => pl.name === p.name);
+
+        if (!existing) {
+            plans.push(p);
+        } else {
+            p.exercises.forEach(ex => {
+                if (!existing.exercises.includes(ex)) {
+                    existing.exercises.push(ex);
+                }
+            });
+        }
+    });
+}
+
+function mergeWorkouts(imported) {
+    imported.forEach(w => {
+        const duplicate = workouts.some(x =>
+            x.date === w.date &&
+            x.plan === w.plan &&
+            x.exercises.length === w.exercises.length
+        );
+
+        if (!duplicate) workouts.push(w);
+    });
+}
+
+// ---------------------------------------------------------
+// EINZEL-EXPORT
+// ---------------------------------------------------------
+function exportSinglePlan(i) {
+    downloadJSON({ type: "plan", value: plans[i] }, `plan-${plans[i].name}.json`);
+}
+
+function exportSingleExercise(i) {
+    downloadJSON({ type: "exercise", value: exercises[i] }, `exercise-${exercises[i].name}.json`);
+}
+
+function exportSingleWorkout(i) {
+    downloadJSON({ type: "workout", value: workouts[i] }, `workout-${workouts[i].date}.json`);
+}
+
+// ---------------------------------------------------------
+// EINZEL-IMPORT
+// ---------------------------------------------------------
+function importSingle(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            const data = JSON.parse(e.target.result);
+
+            if (data.type === "plan") {
+                mergePlans([data.value]);
+            } else if (data.type === "exercise") {
+                mergeExercises([data.value]);
+            } else if (data.type === "workout") {
+                mergeWorkouts([data.value]);
+            } else {
+                alert("Unbekannter Datentyp!");
+                return;
+            }
+
+            save();
+            renderAll();
+            alert("Eintrag erfolgreich importiert!");
+        } catch {
+            alert("Ungültige Datei!");
+        }
+    };
+
+    reader.readAsText(file);
+}
+
+// ---------------------------------------------------------
+// CSV EXPORT
+// ---------------------------------------------------------
+function exportCSVWorkouts() {
+    let csv = "Datum;Plan;Übung;Satz;Gewicht;Wdh\n";
+
+    workouts.forEach(w => {
+        w.exercises.forEach(ex => {
+            ex.sets.forEach((s, i) => {
+                csv += `${w.date};${w.plan};${ex.name};${i + 1};${s.weight};${s.reps}\n`;
+            });
+        });
+    });
+
+    downloadCSV(csv, "workouts.csv");
+}
+
+function exportCSVExercises() {
+    let csv = "Name;Kategorie\n";
+    exercises.forEach(ex => {
+        csv += `${ex.name};${ex.category}\n`;
+    });
+    downloadCSV(csv, "exercises.csv");
+}
+
+function exportCSVPlans() {
+    let csv = "Plan;Übung\n";
+    plans.forEach(p => {
+        p.exercises.forEach(ex => {
+            csv += `${p.name};${ex}\n`;
+        });
+    });
+    downloadCSV(csv, "plans.csv");
+}
+
+function downloadCSV(text, filename) {
+    const blob = new Blob([text], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+
+    URL.revokeObjectURL(url);
+}
