@@ -3,71 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gym Tracking</title>
-
+    <title>Gym Tracker</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-    <!-- Version + Settings -->
+    <!-- HEADER -->
     <div id="appVersion">
-        v1.1.1
+        <span>Version 1.2.0</span>
         <span id="settingsIcon" onclick="openSettingsMenu()">⚙️</span>
     </div>
 
-    <!-- Navigation -->
-    <div class="bottom-nav">
-        <button id="tab-dashboard" onclick="showPage('dashboard')">
-            📊
-            <span>Dashboard</span>
-        </button>
+    <!-- POPUP OVERLAY -->
+    <div id="popupOverlay" class="popup-overlay"></div>
 
-        <button id="tab-history" onclick="showPage('history')">
-            🕒
-            <span>Historie</span>
-        </button>
-
-        <button id="tab-exercises" onclick="showPage('exercises')">
-            🏋️
-            <span>Übungen</span>
-        </button>
-
-        <button id="tab-plans" onclick="showPage('plans')">
-            📋
-            <span>Pläne</span>
-        </button>
-
-        <button id="tab-tracking" onclick="showPage('tracking')">
-            ⏱️
-            <span>Tracking</span>
-        </button>
-    </div>
-
-    <!-- Seiten -->
+	
 
     <!-- DASHBOARD -->
-    <div id="page-dashboard" class="page">
+    <div id="page-dashboard" class="page active">
         <h2>Dashboard</h2>
 
         <h3>Insights</h3>
         <div id="insightsBox"></div>
 
-        <h3>Historie (nach Wochen)</h3>
+        <h3>Historie (Wochen)</h3>
         <div id="historyBox"></div>
     </div>
 
     <!-- HISTORIE -->
     <div id="page-history" class="page">
         <h2>Historie</h2>
+
         <ul id="overviewList"></ul>
         <div id="overviewDetails"></div>
+    </div>
+
+    <!-- TRACKING -->
+    <div id="page-tracking" class="page">
+        <h2>Tracking</h2>
+
+        <h3>Plan auswählen</h3>
+        <select id="trackingPlanSelect"></select>
+        <button onclick="startTracking()">Workout starten</button>
+
+        <h3>Oder freies Training</h3>
+        <button onclick="startFreeTraining()">Freies Training starten</button>
+
+        <p id="trackingStartTime" style="margin-top:10px; color:#666;"></p>
+
+        <div id="trackingArea" style="margin-top:20px;"></div>
     </div>
 
     <!-- ÜBUNGEN -->
     <div id="page-exercises" class="page">
         <h2>Übungen</h2>
 
-        <!-- Kategorien (minimierbar) -->
         <h3 onclick="toggleCollapse('catBox')">
             Kategorien <span id="arrow-catBox">▾</span>
         </h3>
@@ -77,16 +68,13 @@
             <ul id="categoryList"></ul>
         </div>
 
-        <!-- Alle Übungen (minimierbar) -->
         <h3 onclick="toggleCollapse('allExBox')">
             Alle Übungen <span id="arrow-allExBox">▾</span>
         </h3>
         <div id="allExBox">
-
-            <h4>Übung hinzufügen</h4>
             <input id="exerciseName" placeholder="Übungsname">
             <select id="exerciseCategory"></select>
-            <button onclick="addExercise()">Hinzufügen</button>
+            <button onclick="addExercise()">Übung hinzufügen</button>
 
             <ul id="exerciseList"></ul>
         </div>
@@ -96,27 +84,20 @@
     <div id="page-plans" class="page">
         <h2>Trainingspläne</h2>
 
-        <input id="planName" placeholder="Planname">
+        <input id="planName" placeholder="Neuer Planname">
         <button onclick="createPlan()">Plan erstellen</button>
 
-        <div id="planList"></div>
+        <div id="planList" style="margin-top:20px;"></div>
     </div>
 
-    <!-- TRACKING -->
-    <div id="page-tracking" class="page">
-        <h2>Workout Tracking</h2>
-
-        <label>Plan auswählen:</label>
-        <select id="trackingPlanSelect"></select>
-        <button onclick="startTracking()">Starten</button>
-
-        <p id="trackingStartTime"></p>
-
-        <div id="trackingArea"></div>
+    <!-- NAVIGATION -->
+    <div class="bottom-nav">
+        <button id="tab-dashboard" class="active" onclick="showPage('dashboard')">🏠<span>Dashboard</span></button>
+        <button id="tab-history" onclick="showPage('history')">📅<span>Historie</span></button>
+        <button id="tab-tracking" onclick="showPage('tracking')">⏱️<span>Tracking</span></button>
+        <button id="tab-exercises" onclick="showPage('exercises')">💪<span>Übungen</span></button>
+        <button id="tab-plans" onclick="showPage('plans')">📘<span>Pläne</span></button>
     </div>
-
-    <!-- Popup Overlay -->
-    <div id="popupOverlay" class="popup-overlay"></div>
 
     <script src="app.js"></script>
 </body>

@@ -218,7 +218,32 @@ li {
 }
 
 /* ---------------------------------------------------------
-   HISTORIE (früher Übersicht)
+   DRAG & DROP (⋮⋮ handle)
+--------------------------------------------------------- */
+.track-exercise {
+    background: #fff;
+    padding: 12px;
+    border-radius: 12px;
+    margin: 6px 0;
+    border: 1px solid #ddd;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.track-exercise span:last-child {
+    cursor: grab;
+    font-size: 20px;
+    opacity: 0.7;
+}
+
+.track-exercise span:last-child:active {
+    cursor: grabbing;
+    opacity: 1;
+}
+
+/* ---------------------------------------------------------
+   HISTORIE
 --------------------------------------------------------- */
 .overview-highlight {
     border: 2px solid #007aff !important;
@@ -247,7 +272,7 @@ li {
 }
 
 /* ---------------------------------------------------------
-   DASHBOARD – HISTORY (WEEK GROUPING)
+   DASHBOARD – WEEKLY HISTORY
 --------------------------------------------------------- */
 .week-box {
     background: #fff;
@@ -305,7 +330,7 @@ canvas {
     box-shadow: 0 0 20px rgba(0,0,0,0.25);
 }
 
-/* Scrollbar schön machen */
+/* Scrollbar */
 .popup-box::-webkit-scrollbar {
     width: 8px;
 }
