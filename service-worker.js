@@ -1,14 +1,25 @@
+const CACHE = "gym-tracker-cache-v2";
+
 self.addEventListener("install", e => {
+    self.skipWaiting();
     e.waitUntil(
-        caches.open("gym-tracker-cache").then(cache => {
-            return cache.addAll([
-                "index.html",
-                "style.css",
-                "app.js",
-                "manifest.json",
-                "icon.png"
-            ]);
-        })
+        caches.open(CACHE).then(cache => cache.addAll([
+            "index.html",
+            "style.css",
+            "app.js",
+            "manifest.json",
+            "icon.png"
+        ]))
+    );
+});
+
+self.addEventListener("activate", e => {
+    e.waitUntil(
+        caches.keys()
+            .then(keys => Promise.all(
+                keys.filter(k => k !== CACHE).map(k => caches.delete(k))
+            ))
+            .then(() => self.clients.claim())
     );
 });
 
