@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gym Tracker</title>
+    <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -11,8 +12,11 @@
 
     <!-- HEADER -->
     <div id="appVersion">
-        <span>Version 1.2.0</span>
-        <span id="settingsIcon" onclick="openSettingsMenu()">⚙️</span>
+        <span id="appVersionText"></span>
+        <div style="display:flex; gap:10px; align-items:center;">
+            <span id="changelogIcon" onclick="openChangelog()">📋</span>
+            <span id="settingsIcon" onclick="openSettingsMenu()">⚙️</span>
+        </div>
     </div>
 
     <!-- POPUP OVERLAY -->
@@ -23,11 +27,8 @@
     <!-- DASHBOARD -->
     <div id="page-dashboard" class="page active">
         <h2>Dashboard</h2>
-
-        <h3>Insights</h3>
         <div id="insightsBox"></div>
-
-        <h3>Historie (Wochen)</h3>
+        <h2 style="font-size:17px; margin:20px 0 10px;">Wochenübersicht</h2>
         <div id="historyBox"></div>
     </div>
 
@@ -35,7 +36,7 @@
     <div id="page-history" class="page">
         <h2>Historie</h2>
 
-        <ul id="overviewList"></ul>
+        <div id="overviewList"></div>
         <div id="overviewDetails"></div>
     </div>
 
@@ -43,40 +44,60 @@
     <div id="page-tracking" class="page">
         <h2>Tracking</h2>
 
-        <h3>Plan auswählen</h3>
-        <select id="trackingPlanSelect"></select>
-        <button onclick="startTracking()">Workout starten</button>
+        <div class="tracking-start-area">
+            <h3>Plan auswählen</h3>
+            <select id="trackingPlanSelect"></select>
+            <button onclick="startTracking()">Workout starten</button>
+        </div>
 
-        <h3>Oder freies Training</h3>
-        <button onclick="startFreeTraining()">Freies Training starten</button>
+        <div class="tracking-start-area">
+            <h3>Freies Training</h3>
+            <button onclick="startFreeTraining()">Freies Training starten</button>
+        </div>
 
-        <p id="trackingStartTime" style="margin-top:10px; color:#666;"></p>
+        <p id="trackingStartTime" style="margin-top:4px; color:#888; font-size:13px;"></p>
 
-        <div id="trackingArea" style="margin-top:20px;"></div>
+        <div id="trackingArea" style="margin-top:8px;"></div>
     </div>
 
     <!-- ÜBUNGEN -->
     <div id="page-exercises" class="page">
         <h2>Übungen</h2>
 
-        <h3 onclick="toggleCollapse('catBox')">
-            Kategorien <span id="arrow-catBox">▾</span>
-        </h3>
-        <div id="catBox">
-            <input id="newCategory" placeholder="Neue Kategorie">
-            <button onclick="addCategory()">Hinzufügen</button>
-            <ul id="categoryList"></ul>
+        <!-- Search -->
+        <div class="ex-search-wrap">
+            <input id="exerciseSearch" placeholder="🔍  Suchen…" oninput="renderExercises()" autocomplete="off">
         </div>
 
-        <h3 onclick="toggleCollapse('allExBox')">
-            Alle Übungen <span id="arrow-allExBox">▾</span>
-        </h3>
-        <div id="allExBox">
-            <input id="exerciseName" placeholder="Übungsname">
-            <select id="exerciseCategory"></select>
-            <button onclick="addExercise()">Übung hinzufügen</button>
+        <!-- Add form (collapsible) -->
+        <div class="ex-add-card">
+            <div class="ex-add-header" onclick="toggleCollapse('exAddBody')">
+                <span>Übung hinzufügen</span>
+                <span id="arrow-exAddBody">▸</span>
+            </div>
+            <div id="exAddBody" style="display:none; padding:0 16px 16px;">
+                <input id="exerciseName" placeholder="Name der Übung">
+                <select id="exerciseCategory"></select>
+                <button onclick="addExercise()" style="width:100%; margin-top:4px;">Hinzufügen</button>
+            </div>
+        </div>
 
-            <ul id="exerciseList"></ul>
+        <!-- Exercise list grouped by category -->
+        <div id="exerciseList"></div>
+
+        <!-- Category management (collapsible) -->
+        <div class="ex-cat-section">
+            <div class="ex-section-toggle" onclick="toggleCollapse('catManageBody')">
+                <span>Kategorien verwalten</span>
+                <span id="arrow-catManageBody">▸</span>
+            </div>
+            <div id="catManageBody" style="display:none;">
+                <div style="display:flex; gap:8px; margin:12px 0 8px;">
+                    <input id="newCategory" placeholder="Neue Kategorie" style="flex:1; margin:0;">
+                    <button onclick="addCategory()" style="margin:0; white-space:nowrap;">Hinzufügen</button>
+                </div>
+                <div id="categoryList"></div>
+            </div>
         </div>
     </div>
 
@@ -84,10 +105,18 @@
     <div id="page-plans" class="page">
         <h2>Trainingspläne</h2>
 
-        <input id="planName" placeholder="Neuer Planname">
-        <button onclick="createPlan()">Plan erstellen</button>
+        <div class="ex-add-card">
+            <div class="ex-add-header" onclick="toggleCollapse('planAddBody')">
+                <span>Plan erstellen</span>
+                <span id="arrow-planAddBody">▸</span>
+            </div>
+            <div id="planAddBody" style="display:none; padding:0 16px 16px;">
+                <input id="planName" placeholder="Planname" style="margin:12px 0 8px;">
+                <button onclick="createPlan()" style="width:100%; margin:0;">Erstellen</button>
+            </div>
+        </div>
 
-        <div id="planList" style="margin-top:20px;"></div>
+        <div id="planList"></div>
     </div>
 
     <!-- NAVIGATION -->
@@ -101,5 +130,10 @@
 
 
     <script src="app.js"></script>
+    <script>
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("service-worker.js");
+        }
+    </script>
 </body>
 </html>

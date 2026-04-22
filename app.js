@@ -1,7 +1,57 @@
-// ---------------------------------------------------------
+﻿// ---------------------------------------------------------
 // VERSION
 // ---------------------------------------------------------
 const APP_VERSION = "1.2.1";
+
+const CHANGELOG = [
+    {
+        version: "1.2.1",
+        date: "2026-04-22",
+        notes: [
+            "Modernes Karten-Design für alle Tabs",
+            "Dashboard mit Stats-Grid und Progressions-Karten",
+            "Historie zeigt Sätze als Chips in der Detailansicht",
+            "Tracking-Tab mit Fortschrittsanzeige und Satz-Chips",
+            "Pläne-Tab mit Übungs-Chips statt Listen",
+            "Übungen-Tab mit Suche und Kategorien-Gruppen",
+        ]
+    },
+    {
+        version: "1.2.0",
+        date: "2026-04-20",
+        notes: [
+            "Volumen-Metrik in der Progression (Gewicht × Wdh)",
+            "PR-Erkennung mit Toast-Benachrichtigung",
+            "Plateau-Erkennung nach 3 gleichen Werten",
+            "Verbesserte Mini-Charts mit Bezier-Kurven und Gradient",
+            "Übungs-Detailansicht mit vollständiger Historie",
+            "Workout-Dauer wird gespeichert und angezeigt",
+        ]
+    },
+    {
+        version: "1.1.0",
+        date: "2026-04-15",
+        notes: [
+            "Einstellungsmenü mit Export/Import (JSON)",
+            "CSV-Export für Workouts, Übungen und Pläne",
+            "Workout-Editor zum nachträglichen Bearbeiten",
+            "Freies Training ohne Plan möglich",
+            "Drag & Drop Sortierung der Übungen im Tracking",
+        ]
+    },
+    {
+        version: "1.0.0",
+        date: "2026-04-10",
+        notes: [
+            "Erster Release",
+            "Übungen mit Kategorien verwalten",
+            "Trainingspläne erstellen",
+            "Workouts tracken mit Sätzen und Wiederholungen",
+            "Dashboard mit Wochenübersicht und Progression",
+            "Historie aller Workouts",
+        ]
+    }
+];
 
 // ---------------------------------------------------------
 // DATA (with ID support)
@@ -69,7 +119,7 @@ function repairMissingExercises() {
             if (!found) {
                 exercises.push({
                     id: ex.id,
-                    name: ex.name ? ex.name : "Unbekannte Übung",
+                    name: ex.name || "Unbekannte Übung",
                     category: "Unbekannt"
                 });
 
@@ -88,7 +138,6 @@ repairMissingExercises();
 
 // ---------------------------------------------------------
 // SAVE
-// BUG FIX #1: removed duplicate saveAll() — everything now calls save()
 // ---------------------------------------------------------
 function save() {
     localStorage.setItem("categories", JSON.stringify(categories));
@@ -139,8 +188,11 @@ function showPage(page) {
     document.querySelectorAll(".bottom-nav button").forEach(b => b.classList.remove("active"));
     document.getElementById("tab-" + page).classList.add("active");
 
-    if (page === "dashboard") renderDashboard();
-    else renderAll();
+    if      (page === "dashboard")  renderDashboard();
+    else if (page === "history")    renderHistory();
+    else if (page === "exercises")  { renderCategories(); renderExercises(); }
+    else if (page === "plans")      renderPlans();
+    else if (page === "tracking")   renderTracking();
 }
 
 function renderDashboard() {
@@ -165,54 +217,62 @@ function renderHistory() {
     list.innerHTML = "";
     details.innerHTML = "";
 
-    if (workouts.length === 0) return;
+    if (workouts.length === 0) {
+        list.innerHTML = `<p style="color:#888;">Noch keine Workouts gespeichert.</p>`;
+        return;
+    }
 
-    // BUG FIX #2: show newest workouts first
     const reversed = [...workouts].reverse();
 
-    reversed.forEach((w, index) => {
+    list.innerHTML = reversed.map((w, index) => {
         const originalIndex = workouts.length - 1 - index;
-
-        list.innerHTML += `
-            <li>
-                <div onclick="showWorkoutDetails(${originalIndex})" style="flex:1; cursor:pointer;">
-                    <strong>${w.plan}</strong><br>
-                    ${w.date}
+        return `
+            <div class="history-card">
+                <div class="history-card-main" onclick="showWorkoutDetails(${originalIndex})">
+                    <div class="history-card-name">${w.plan}</div>
+                    <div class="history-card-meta">${w.date}${w.duration ? ` · ${w.duration} min` : ""}</div>
                 </div>
-
-                <button class="delete-btn" onclick="openWorkoutEditor(${originalIndex})">✏️</button>
-                <button class="delete-btn" onclick="deleteWorkout(${originalIndex})">🗑️</button>
-            </li>
+                <div class="history-card-actions">
+                    <button class="ex-icon-btn" onclick="openWorkoutEditor(${originalIndex})">✏️</button>
+                    <button class="ex-icon-btn" onclick="deleteWorkout(${originalIndex})">🗑️</button>
+                </div>
+            </div>
         `;
-    });
+    }).join("");
 }
 
 function showWorkoutDetails(index) {
     const w = workouts[index];
     const details = document.getElementById("overviewDetails");
 
-    document.querySelectorAll("#overviewList li").forEach(li => li.classList.remove("overview-highlight"));
-
+    document.querySelectorAll(".history-card").forEach(c => c.classList.remove("overview-highlight"));
     const reversedIndex = workouts.length - 1 - index;
-    const listItem = document.querySelector(`#overviewList li:nth-child(${reversedIndex + 1})`);
-    if (listItem) listItem.classList.add("overview-highlight");
+    const card = document.querySelectorAll(".history-card")[reversedIndex];
+    if (card) card.classList.add("overview-highlight");
 
-    let html = `<h3>${w.plan} – ${w.date}</h3>`;
-
-    if (w.note) {
-        html += `<div class="note-box"><strong>Notiz:</strong><br>${w.note}</div>`;
-    }
-
-    w.exercises.forEach(ex => {
+    const exercisesHtml = w.exercises.map(ex => {
         const exInfo = exercises.find(e => e.id === ex.id);
-        html += `<strong>${exInfo ? exInfo.name : "Unbekannte Übung"}</strong><ul>`;
-        ex.sets.forEach(s => {
-            html += `<li>${s.weight}kg × ${s.reps}</li>`;
-        });
-        html += `</ul>`;
-    });
+        const setsHtml = ex.sets.map((s, i) =>
+            `<span class="set-chip">S${i + 1}: ${s.weight}kg × ${s.reps}</span>`
+        ).join("");
+        return `
+            <div class="detail-exercise">
+                <div class="detail-ex-name">${exInfo ? exInfo.name : "Unbekannte Übung"}</div>
+                <div class="detail-sets">${setsHtml}</div>
+            </div>
+        `;
+    }).join("");
 
-    details.innerHTML = html;
+    details.innerHTML = `
+        <div class="detail-card">
+            <div class="detail-header">
+                <strong>${w.plan}</strong>
+                <span class="detail-meta">${w.date}${w.duration ? ` · ${w.duration} min` : ""}</span>
+            </div>
+            ${w.note ? `<div class="detail-exercise"><div class="note-box" style="margin:0;"><strong>Notiz:</strong> ${w.note}</div></div>` : ""}
+            ${exercisesHtml}
+        </div>
+    `;
 }
 
 function deleteWorkout(i) {
@@ -230,18 +290,18 @@ function renderCategories() {
     const list = document.getElementById("categoryList");
     const select = document.getElementById("exerciseCategory");
 
-    list.innerHTML = "";
-    select.innerHTML = "";
+    if (select) {
+        select.innerHTML = categories.map(c => `<option>${c}</option>`).join("");
+    }
 
-    categories.forEach((c, i) => {
-        list.innerHTML += `
-            <li>
+    if (list) {
+        list.innerHTML = categories.map((c, i) => `
+            <span class="cat-chip">
                 ${c}
-                <button class="delete-btn" onclick="deleteCategory(${i})">×</button>
-            </li>
-        `;
-        select.innerHTML += `<option>${c}</option>`;
-    });
+                <button class="cat-chip-delete" onclick="deleteCategory(${i})">×</button>
+            </span>
+        `).join("");
+    }
 }
 
 function addCategory() {
@@ -310,6 +370,7 @@ function deleteExercise(i) {
     }));
 
     exercises.splice(i, 1);
+    delete progressionCollapsed[exId];
 
     save();
     renderExercises();
@@ -318,15 +379,41 @@ function deleteExercise(i) {
 
 function renderExercises() {
     const list = document.getElementById("exerciseList");
+    const searchEl = document.getElementById("exerciseSearch");
+    const filter = searchEl ? searchEl.value.toLowerCase().trim() : "";
+
     list.innerHTML = "";
 
+    const groups = {};
     exercises.forEach((ex, i) => {
+        if (filter && !ex.name.toLowerCase().includes(filter) && !ex.category.toLowerCase().includes(filter)) return;
+        if (!groups[ex.category]) groups[ex.category] = [];
+        groups[ex.category].push({ ex, i });
+    });
+
+    if (Object.keys(groups).length === 0) {
+        list.innerHTML = `<p style="color:#999; text-align:center; margin-top:24px;">Keine Übungen gefunden</p>`;
+        return;
+    }
+
+    Object.keys(groups).sort().forEach(category => {
+        const items = groups[category];
         list.innerHTML += `
-            <li>
-                ${ex.name} (${ex.category})
-                <button onclick="renameExercisePopup('${ex.id}')">✏️</button>
-                <button class="delete-btn" onclick="deleteExercise(${i})">×</button>
-            </li>
+            <div class="ex-group">
+                <div class="ex-group-header">
+                    <span>${category}</span>
+                    <span class="ex-group-count">${items.length}</span>
+                </div>
+                ${items.map(({ ex, i }) => `
+                    <div class="ex-item">
+                        <span class="ex-item-name">${ex.name}</span>
+                        <div class="ex-item-actions">
+                            <button class="ex-icon-btn" onclick="renameExercisePopup('${ex.id}')">✏️</button>
+                            <button class="ex-icon-btn ex-delete" onclick="deleteExercise(${i})">🗑️</button>
+                        </div>
+                    </div>
+                `).join("")}
+            </div>
         `;
     });
 }
@@ -373,68 +460,54 @@ function renderPlans() {
     const list = document.getElementById("planList");
     const select = document.getElementById("trackingPlanSelect");
 
-    list.innerHTML = "";
-    select.innerHTML = "";
+    const exerciseOptions = exercises
+        .map(ex => `<option value="${ex.id}">${ex.name}</option>`)
+        .join("");
 
-    plans.forEach((p, i) => {
-        const exerciseOptions = exercises
-            .map(ex => `<option value="${ex.id}">${ex.name}</option>`)
-            .join("");
+    list.innerHTML = plans.map((p, i) => {
+        const chipsHtml = p.exercises.map(exId => {
+            const ex = exercises.find(e => e.id === exId);
+            return `
+                <span class="plan-ex-chip">
+                    ${ex ? ex.name : "?"}
+                    <button class="cat-chip-delete" onclick="removeExerciseFromPlan(${i}, '${exId}')">×</button>
+                </span>
+            `;
+        }).join("");
 
-        const assignedExercises = p.exercises
-            .map(exId => {
-                const ex = exercises.find(e => e.id === exId);
-                return `
-                    <li>
-                        ${ex ? ex.name : "Unbekannt"}
-                        <button class="delete-btn" onclick="removeExerciseFromPlan(${i}, '${exId}')">×</button>
-                    </li>
-                `;
-            })
-            .join("");
-
-        list.innerHTML += `
-            <div class="plan-box" id="planBox_${i}">
-
-                <div class="plan-header" onclick="toggleCollapse('plan_${i}'); highlightPlan(${i});">
-                    <span class="plan-title">${p.name}</span>
-                    <button class="delete-btn" onclick="deletePlan(${i}); event.stopPropagation();">🗑️</button>
-                </div>
-
-                <div id="plan_${i}" class="collapse-content">
-                    <div style="margin-top:10px;">
-                        <select id="planAdd_${i}">
-                            ${exerciseOptions}
-                        </select>
-                        <button onclick="addExerciseToPlan(${i})">Hinzufügen</button>
+        return `
+            <div class="plan-card" id="planBox_${i}">
+                <div class="plan-card-header" onclick="toggleCollapse('plan_${i}'); highlightPlan(${i});">
+                    <span class="plan-card-title">${p.name}</span>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span id="arrow-plan_${i}">▸</span>
+                        <button class="ex-icon-btn" onclick="deletePlan(${i}); event.stopPropagation();">🗑️</button>
                     </div>
-
-                    <ul style="margin-top:10px;">
-                        ${assignedExercises}
-                    </ul>
                 </div>
-
+                <div id="plan_${i}" class="plan-card-body" style="display:none;">
+                    <div class="plan-exercises">${chipsHtml || `<span style="color:#aaa; font-size:14px;">Noch keine Übungen</span>`}</div>
+                    <div style="display:flex; gap:8px;">
+                        <select id="planAdd_${i}" style="flex:1; margin:0;">${exerciseOptions}</select>
+                        <button onclick="addExerciseToPlan(${i})" style="margin:0; white-space:nowrap;">+ Hinzufügen</button>
+                    </div>
+                </div>
             </div>
         `;
+    }).join("");
 
-        select.innerHTML += `<option value="${i}">${p.name}</option>`;
-    });
+    select.innerHTML = plans.map((p, i) => `<option value="${i}">${p.name}</option>`).join("");
 }
 
 function highlightPlan(index) {
-    const allBoxes = document.querySelectorAll(".plan-box");
+    const allCards = document.querySelectorAll(".plan-card");
 
-    allBoxes.forEach((box, i) => {
-        const content = document.getElementById("plan_" + i);
-
+    allCards.forEach((card, i) => {
         if (i !== index) {
-            box.classList.remove("active");
-            if (content) content.style.display = "none";
+            card.classList.remove("active");
         }
     });
 
-    const activeBox = allBoxes[index];
-    activeBox.classList.add("active");
+    if (allCards[index]) allCards[index].classList.add("active");
 }
 
 // ---------------------------------------------------------
@@ -477,7 +550,6 @@ function toggleTimer() {
 
 // ---------------------------------------------------------
 // MOVE EXERCISES
-// BUG FIX #3: deduplicated — was defined 3 times, now defined once
 // ---------------------------------------------------------
 function moveExerciseUp(index) {
     if (index > 0) {
@@ -522,7 +594,6 @@ function startTracking() {
 
     const plan = plans[planIndex];
 
-    // BUG FIX #4: guard against empty plans instead of silently starting a broken session
     if (!plan.exercises || plan.exercises.length === 0) {
         alert(`Der Plan "${plan.name}" hat noch keine Übungen. Bitte zuerst Übungen im Plan hinzufügen.`);
         return;
@@ -667,37 +738,45 @@ function renderTracking() {
             currentTracking.startTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     }
 
+    const addExerciseBlock = `
+        <div class="ex-add-card" style="margin-top:12px;">
+            <div class="ex-add-header" onclick="toggleCollapse('addExToWorkout')">
+                <span>Übung hinzufügen</span>
+                <span id="arrow-addExToWorkout">▸</span>
+            </div>
+            <div id="addExToWorkout" style="display:none; padding:0 16px 16px;">
+                <select id="addExerciseToWorkoutSelect" style="margin:8px 0 10px;">${exerciseOptions}</select>
+                <button onclick="addExerciseToCurrentWorkout()" style="width:100%; margin:0;">Hinzufügen</button>
+            </div>
+        </div>
+    `;
+
     // -----------------------------------------------------
     // FINISHED ALL EXERCISES
     // -----------------------------------------------------
     if (currentExerciseIndex >= total) {
+        const doneList = currentTracking.exercises.map(ex => {
+            const info = exercises.find(e => e.id === ex.id);
+            const setsText = ex.sets.map(s => `${s.weight}×${s.reps}`).join(", ");
+            return `
+                <div class="tracking-ex-item done">
+                    <div>
+                        <div>${info ? info.name : "Unbekannt"}</div>
+                        ${setsText ? `<div class="tracking-ex-sets">${setsText}</div>` : ""}
+                    </div>
+                </div>
+            `;
+        }).join("");
+
         area.innerHTML = `
-            <h3>Letzte Übung abgeschlossen</h3>
-
-            <button onclick="finishWorkoutPrompt()">Workout beenden</button>
-
-            <div class="optional-box">
-                <h4>Übung zum Workout hinzufügen</h4>
-                <select id="addExerciseToWorkoutSelect">
-                    ${exerciseOptions}
-                </select>
-                <button onclick="addExerciseToCurrentWorkout()">Hinzufügen</button>
+            <div class="tracking-done-card">
+                <div class="tracking-done-icon">✅</div>
+                <div class="tracking-done-title">Alle Übungen abgeschlossen!</div>
+                <div class="tracking-done-sub">${total} Übung${total !== 1 ? "en" : ""}</div>
+                <button onclick="finishWorkoutPrompt()" style="width:100%; margin:0; background:#34c759;">Workout beenden</button>
             </div>
-
-            ${currentExerciseIndex > 0 ? `
-                <h4>Vorherige Übungen:</h4>
-                <ul>
-                    ${currentTracking.exercises.map((ex, idx) => {
-                        const info = exercises.find(e => e.id === ex.id);
-                        return `
-                            <li>
-                                ${info ? info.name : "Unbekannt"}
-                                <ul>${ex.sets.map(s => `<li>${s.weight}kg × ${s.reps}</li>`).join("")}</ul>
-                            </li>
-                        `;
-                    }).join("")}
-                </ul>
-            ` : ""}
+            <div class="tracking-exercise-list">${doneList}</div>
+            ${addExerciseBlock}
         `;
         return;
     }
@@ -708,55 +787,56 @@ function renderTracking() {
     const ex = currentTracking.exercises[currentExerciseIndex];
     const exInfo = exercises.find(e => e.id === ex.id);
 
+    const setsChips = ex.sets.length > 0
+        ? `<div class="tracking-sets">${ex.sets.map((s, i) => `<span class="set-chip">S${i + 1}: ${s.weight}kg × ${s.reps}</span>`).join("")}</div>`
+        : "";
+
+    const exerciseListHtml = currentTracking.exercises.map((item, idx) => {
+        const info = exercises.find(e => e.id === item.id);
+        const isCurrent = idx === currentExerciseIndex;
+        return `
+            <div class="tracking-ex-item${isCurrent ? " current" : idx < currentExerciseIndex ? " done" : ""}">
+                <span>${info ? info.name : "Unbekannt"}</span>
+                <div class="tracking-ex-item-actions">
+                    <button class="ex-icon-btn" onclick="moveExerciseUp(${idx})">↑</button>
+                    <button class="ex-icon-btn" onclick="moveExerciseDown(${idx})">↓</button>
+                </div>
+            </div>
+        `;
+    }).join("");
+
     area.innerHTML = `
-        <h3>${exInfo ? exInfo.name : "Unbekannt"}</h3>
-        <p>${done} von ${total} Übungen erledigt</p>
+        <div class="tracking-header">
+            <div class="tracking-ex-name">${exInfo ? exInfo.name : "Unbekannt"}</div>
+            <div class="tracking-progress">${done + 1} / ${total}</div>
+        </div>
 
-        <label>Gewicht (kg)</label>
-        <input id="trackWeight" type="number" value="${ex.sets.at(-1)?.weight ?? ''}" />
+        <div class="tracking-input-card">
+            <div class="tracking-input-row">
+                <div class="tracking-input-group">
+                    <label>Gewicht (kg)</label>
+                    <input id="trackWeight" type="number" value="${ex.sets.at(-1)?.weight ?? ""}">
+                </div>
+                <div class="tracking-input-group">
+                    <label>Wiederholungen</label>
+                    <input id="trackReps" type="number" value="${ex.sets.at(-1)?.reps ?? ""}">
+                </div>
+            </div>
+            <button onclick="saveSet()" style="width:100%; margin:10px 0 0;">Satz speichern</button>
+        </div>
 
-        <label>Wiederholungen</label>
-        <input id="trackReps" type="number" value="${ex.sets.at(-1)?.reps ?? ''}" />
+        ${setsChips}
 
-        <button onclick="saveSet()">Satz speichern</button>
+        <button onclick="nextExercise()" style="width:100%; margin:0 0 4px; background:#34c759;">Nächste Übung →</button>
 
-        <button onclick="nextExercise()" style="margin-top:20px;">Nächste Übung</button>
-
-        <div class="timer-box" onclick="toggleTimer()" style="margin-top:25px;">
-            <span class="timer-icon">⏱️</span>
+        <div class="tracking-timer" onclick="toggleTimer()">
+            <span>⏱️</span>
             <span id="timerDisplay">${formatTime(timerSeconds)}</span>
         </div>
 
-        ${ex.sets.length > 0 ? `
-            <h4>Bisherige Sätze:</h4>
-            <ul>
-                ${ex.sets.map(s => `<li>${s.weight}kg × ${s.reps}</li>`).join("")}
-            </ul>
-        ` : ""}
+        <div class="tracking-exercise-list">${exerciseListHtml}</div>
 
-        <div class="optional-box">
-            <h4>Übung zum Workout hinzufügen</h4>
-            <select id="addExerciseToWorkoutSelect">
-                ${exerciseOptions}
-            </select>
-            <button onclick="addExerciseToCurrentWorkout()">Hinzufügen</button>
-        </div>
-
-        <h4>Übungen sortieren</h4>
-        <ul>
-            ${currentTracking.exercises.map((ex, idx) => {
-                const info = exercises.find(e => e.id === ex.id);
-                return `
-                    <li class="track-exercise" style="display:flex; justify-content:space-between; align-items:center;">
-                        <span>${info ? info.name : "Unbekannt"}</span>
-                        <div style="display:flex; align-items:center;">
-                            <button onclick="moveExerciseUp(${idx})" style="font-size:16px; margin:0 2px;">↑</button>
-                            <button onclick="moveExerciseDown(${idx})" style="font-size:16px; margin:0 2px;">↓</button>
-                        </div>
-                    </li>
-                `;
-            }).join("")}
-        </ul>
+        ${addExerciseBlock}
     `;
 }
 
@@ -769,8 +849,15 @@ function saveSet() {
 
     if (!weight || !reps) return;
 
+    const exId = currentTracking.exercises[currentExerciseIndex].id;
+    const prevPR = getExercisePR(exId);
+
     currentTracking.exercises[currentExerciseIndex].sets.push({ weight, reps });
     renderTracking();
+
+    if (prevPR > 0 && weight > prevPR) {
+        showPRToast(weight);
+    }
 }
 
 // ---------------------------------------------------------
@@ -783,7 +870,6 @@ function nextExercise() {
 
 // ---------------------------------------------------------
 // FINISH WORKOUT
-// BUG FIX #5: replaced native browser prompt() with in-app popup
 // ---------------------------------------------------------
 function finishWorkoutPrompt() {
     openPopup(`
@@ -802,6 +888,9 @@ function finishWorkout() {
     if (noteEl && noteEl.value.trim()) {
         currentTracking.note = noteEl.value.trim();
     }
+
+    const durationMs = new Date() - new Date(currentTracking.startTime);
+    currentTracking.duration = Math.round(durationMs / 60000);
 
     workouts.push(currentTracking);
     save();
@@ -915,7 +1004,6 @@ function deleteEditorExercise(exIndex) {
 
 /* ---------------------------------------------------------
    SPEICHERN
-   BUG FIX #1 continued: saveAll() replaced with save()
 --------------------------------------------------------- */
 
 function saveWorkoutEditor() {
@@ -976,11 +1064,13 @@ function getExerciseProgression() {
             const exInfo = exercises.find(e => e.id === ex.id);
             if (!exInfo) return;
 
-            if (!map[ex.id]) map[ex.id] = { name: exInfo.name, values: [] };
+            if (!map[ex.id]) map[ex.id] = { name: exInfo.name, volumeValues: [], bestSetValues: [] };
 
             if (ex.sets.length > 0) {
-                const avg = ex.sets.reduce((sum, s) => sum + s.weight, 0) / ex.sets.length;
-                map[ex.id].values.push(avg);
+                const volume = ex.sets.reduce((sum, s) => sum + s.weight * s.reps, 0);
+                const bestSet = Math.max(...ex.sets.map(s => s.weight));
+                map[ex.id].volumeValues.push(volume);
+                map[ex.id].bestSetValues.push(bestSet);
             }
         });
     });
@@ -989,31 +1079,39 @@ function getExerciseProgression() {
 
     Object.keys(map).forEach(id => {
         const entry = map[id];
-        const arr = entry.values;
+        const arr = entry.volumeValues;
+        const bArr = entry.bestSetValues;
 
         if (arr.length < 2) return;
 
         const last = arr[arr.length - 1];
         const prev = arr[arr.length - 2];
 
-        let avgDiff = 0;
-        if (arr.length > 1) {
-            let sum = 0;
-            for (let i = 1; i < arr.length; i++) {
-                sum += arr[i] - arr[i - 1];
-            }
-            avgDiff = sum / (arr.length - 1);
-        }
+        let sum = 0;
+        for (let i = 1; i < arr.length; i++) sum += arr[i] - arr[i - 1];
+        const avgDiff = sum / (arr.length - 1);
+
+        const recentVols = arr.slice(-3);
+        const plateau = arr.length >= 3 && recentVols[recentVols.length - 1] <= recentVols[0];
+
+        const lastBest = bArr[bArr.length - 1];
+        const prevBest = bArr.length >= 2 ? bArr.slice(0, -1).reduce((m, v) => v > m ? v : m, 0) : 0;
+        const allTimeBest = lastBest > prevBest ? lastBest : prevBest;
+        const isPR = bArr.length >= 2 && lastBest > prevBest;
 
         result.push({
             id,
             name: entry.name,
             lastIncrease: last - prev,
             avgIncrease: avgDiff,
-            lastAvg: last,
-            prevAvg: prev,
+            lastVolume: last,
             count: arr.length,
-            values: arr
+            values: arr,
+            chartValues: bArr,
+            lastBest,
+            allTimeBest,
+            isPR,
+            plateau
         });
     });
 
@@ -1027,15 +1125,21 @@ function drawMiniChart(canvasId, values) {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
 
+    canvas.width = canvas.offsetWidth || 300;
+
     const ctx = canvas.getContext("2d");
     const w = canvas.width;
     const h = canvas.height;
+    const labelH = 16;
+    const padX = 4;
+    const padY = 6;
+    const chartH = h - labelH;
 
     ctx.clearRect(0, 0, w, h);
 
     if (values.length < 2) {
-        ctx.fillStyle = "#ccc";
-        ctx.fillRect(0, h / 2, w, 2);
+        ctx.fillStyle = "#e0e0e0";
+        ctx.fillRect(padX, chartH / 2, w - padX * 2, 2);
         return;
     }
 
@@ -1043,18 +1147,56 @@ function drawMiniChart(canvasId, values) {
     const max = Math.max(...values);
     const range = max - min || 1;
 
+    const getX = i => padX + (i / (values.length - 1)) * (w - padX * 2);
+    const getY = v => padY + (1 - (v - min) / range) * (chartH - padY * 2);
+
+    const buildCurve = () => {
+        ctx.beginPath();
+        ctx.moveTo(getX(0), getY(values[0]));
+        for (let i = 1; i < values.length; i++) {
+            const x0 = getX(i - 1), y0 = getY(values[i - 1]);
+            const x1 = getX(i),     y1 = getY(values[i]);
+            const cpX = (x0 + x1) / 2;
+            ctx.bezierCurveTo(cpX, y0, cpX, y1, x1, y1);
+        }
+    };
+
+    // Gradient fill under the curve
+    buildCurve();
+    ctx.lineTo(getX(values.length - 1), chartH);
+    ctx.lineTo(getX(0), chartH);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, 0, 0, chartH);
+    grad.addColorStop(0, "rgba(0, 122, 255, 0.22)");
+    grad.addColorStop(1, "rgba(0, 122, 255, 0.0)");
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Line
+    buildCurve();
     ctx.strokeStyle = "#007aff";
     ctx.lineWidth = 2;
-    ctx.beginPath();
-
-    values.forEach((v, i) => {
-        const x = (i / (values.length - 1)) * w;
-        const y = h - ((v - min) / range) * h;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
-
+    ctx.lineJoin = "round";
     ctx.stroke();
+
+    // Endpoint dot
+    const lx = getX(values.length - 1);
+    const ly = getY(values[values.length - 1]);
+    ctx.beginPath();
+    ctx.arc(lx, ly, 4, 0, Math.PI * 2);
+    ctx.fillStyle = "#007aff";
+    ctx.fill();
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = "#999";
+    ctx.font = "10px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(`${values[0]} kg`, padX, h);
+    ctx.textAlign = "right";
+    ctx.fillText(`${values[values.length - 1]} kg`, w - padX, h);
 }
 
 // ---------------------------------------------------------
@@ -1064,62 +1206,74 @@ let progressionCollapsed = {};
 
 function toggleProgression(id) {
     progressionCollapsed[id] = !progressionCollapsed[id];
-    renderInsights();
+    const collapsed = progressionCollapsed[id];
+    const div = document.getElementById(`prog_${id}`);
+    const arrow = document.getElementById(`arrow-prog_${id}`);
+    if (div) div.style.display = collapsed ? "none" : "block";
+    if (arrow) arrow.textContent = collapsed ? "▸" : "▾";
+    if (!collapsed && div) {
+        const canvas = div.querySelector("canvas");
+        if (canvas && canvas.dataset.values) {
+            drawMiniChart(canvas.id, JSON.parse(canvas.dataset.values));
+        }
+    }
 }
 
 function renderInsights() {
     const box = document.getElementById("insightsBox");
 
     if (workouts.length === 0) {
-        box.innerHTML = `<p>Noch keine Insights verfügbar.</p>`;
+        box.innerHTML = `<p style="color:#888;">Noch keine Insights verfügbar.</p>`;
         return;
     }
 
-    const thisWeek = getWorkoutsThisWeek().length;
-    const comparison = getWeeklyComparison();
+    const thisWeekCount = getWorkoutsThisWeek().length;
+    const lastWeekCount = getWorkoutsLastWeek().length;
+    const comparison = weeklyComparisonText(thisWeekCount, lastWeekCount);
     const progression = getExerciseProgression();
 
     box.innerHTML = `
-        <div class="insight-card">
-            <h3>Trainings diese Woche</h3>
-            <p>${thisWeek}</p>
+        <div class="insight-stats-grid">
+            <div class="insight-stat-card">
+                <div class="insight-stat-value">${thisWeekCount}</div>
+                <div class="insight-stat-label">Diese Woche</div>
+            </div>
+            <div class="insight-stat-card">
+                <div class="insight-stat-value">${lastWeekCount}</div>
+                <div class="insight-stat-label">Letzte Woche</div>
+            </div>
         </div>
 
-        <div class="insight-card">
-            <h3>Vergleich zu letzter Woche</h3>
-            <p>${comparison}</p>
-        </div>
+        <div class="insight-compare-card">${comparison}</div>
 
-        <div class="insight-card">
+        <div class="progression-card">
             <h3>Progression</h3>
             ${
                 progression.length === 0
-                ? "<p>Noch keine Progression messbar</p>"
+                ? `<p style="color:#888; margin:0;">Noch keine Progression messbar.</p>`
                 : progression.map((p, idx) => {
-
                     if (progressionCollapsed[p.id] === undefined) {
                         progressionCollapsed[p.id] = false;
                     }
-
                     const collapsed = progressionCollapsed[p.id];
+                    const prBadge = p.isPR ? `<span class="badge-pr">🏆 PR</span>` : "";
+                    const plateauBadge = p.plateau ? `<span class="badge-plateau">⚠️ Plateau</span>` : "";
 
                     return `
-                        <div class="progression-item" style="margin-bottom:15px;">
-
-                            <h4 onclick="toggleProgression('${p.id}')"
-                                style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
-                                <span>${p.name}</span>
-                                <span>${collapsed ? "▸" : "▾"}</span>
-                            </h4>
-
-                            <div id="prog_${p.id}" style="display:${collapsed ? "none" : "block"};">
-                                Letzte Steigerung: ${p.lastIncrease > 0 ? "+" : ""}${p.lastIncrease.toFixed(1)} kg<br>
-                                Durchschnittliche Steigerung: ${p.avgIncrease > 0 ? "+" : ""}${p.avgIncrease.toFixed(1)} kg<br>
-                                (${p.count} Workouts)
-
-                                <canvas id="chart_${idx}" width="200" height="40" style="margin-top:6px;"></canvas>
-                            </div>
-
+                        <h4 onclick="toggleProgression('${p.id}')" class="progression-header">
+                            <span>${p.name} ${prBadge}${plateauBadge}</span>
+                            <span class="progression-header-controls">
+                                <button onclick="showExerciseDetail('${p.id}'); event.stopPropagation();"
+                                        style="font-size:12px; padding:3px 8px; margin:0;">Details</button>
+                                <span id="arrow-prog_${p.id}">${collapsed ? "▸" : "▾"}</span>
+                            </span>
+                        </h4>
+                        <div id="prog_${p.id}" style="display:${collapsed ? "none" : "block"}; font-size:13px; color:#555; padding:8px 0 4px;">
+                            Volumen letzte Steigerung: ${p.lastIncrease > 0 ? "+" : ""}${Math.round(p.lastIncrease)} kg·Wdh<br>
+                            Bestes Gewicht: ${p.lastBest} kg${p.allTimeBest > p.lastBest ? ` (Rekord: ${p.allTimeBest} kg)` : ""}<br>
+                            (${p.count} Workouts)
+                            <canvas id="chart_${idx}" height="75" class="mini-chart-canvas"
+                                data-values='${JSON.stringify(p.chartValues)}'></canvas>
                         </div>
                     `;
                 }).join("")
@@ -1129,7 +1283,7 @@ function renderInsights() {
 
     progression.forEach((p, idx) => {
         if (!progressionCollapsed[p.id]) {
-            drawMiniChart(`chart_${idx}`, p.values);
+            drawMiniChart(`chart_${idx}`, p.chartValues);
         }
     });
 }
@@ -1141,7 +1295,7 @@ function renderHistoryGrouped() {
     const box = document.getElementById("historyBox");
 
     if (workouts.length === 0) {
-        box.innerHTML = `<p>Noch keine Workouts gespeichert.</p>`;
+        box.innerHTML = `<p style="color:#888;">Noch keine Workouts gespeichert.</p>`;
         return;
     }
 
@@ -1150,17 +1304,15 @@ function renderHistoryGrouped() {
 
     box.innerHTML = keys.map(key => {
         const list = groups[key];
-
         return `
             <div class="week-box">
-                <h3 onclick="toggleCollapse('${key}')">
-                    ${key} <span id="arrow-${key}">▾</span>
+                <h3 onclick="toggleCollapse('week_${key}')">
+                    ${key} <span id="arrow-week_${key}">▾</span>
                 </h3>
-
-                <div id="${key}">
+                <div id="week_${key}">
                     ${list.map(w => `
                         <div class="history-entry">
-                            <strong>${w.plan}</strong> – ${w.date}
+                            <strong>${w.plan}</strong> – ${w.date}${w.duration ? ` · ${w.duration} min` : ""}
                         </div>
                     `).join("")}
                 </div>
@@ -1171,82 +1323,64 @@ function renderHistoryGrouped() {
 
 // ---------------------------------------------------------
 // WEEKLY INSIGHT HELPERS
-// BUG FIX #6: getWorkoutsLastWeek now handles year boundaries correctly
-//             by subtracting 7 days instead of decrementing the week number
 // ---------------------------------------------------------
-function getWorkoutsThisWeek() {
-    const now = new Date();
-    const { year, week } = getISOWeek(now);
-
+function getWorkoutsForWeekOf(date) {
+    const { year, week } = getISOWeek(date);
     return workouts.filter(w => {
         const wInfo = getISOWeek(w.date);
         return wInfo.year === year && wInfo.week === week;
     });
+}
+
+function getWorkoutsThisWeek() {
+    return getWorkoutsForWeekOf(new Date());
 }
 
 function getWorkoutsLastWeek() {
-    const lastWeekDate = new Date();
-    lastWeekDate.setDate(lastWeekDate.getDate() - 7);
-    const { year, week } = getISOWeek(lastWeekDate);
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return getWorkoutsForWeekOf(d);
+}
 
-    return workouts.filter(w => {
-        const wInfo = getISOWeek(w.date);
-        return wInfo.year === year && wInfo.week === week;
-    });
+function weeklyComparisonText(thisWeek, lastWeek) {
+    if (thisWeek === 0 && lastWeek === 0) return "Noch keine Daten vorhanden";
+    if (thisWeek > lastWeek) return `+${thisWeek - lastWeek} Trainings mehr als letzte Woche`;
+    if (thisWeek < lastWeek) return `${lastWeek - thisWeek} Trainings weniger als letzte Woche`;
+    return "Gleich viele Trainings wie letzte Woche";
 }
 
 function getWeeklyComparison() {
-    const thisWeek = getWorkoutsThisWeek().length;
-    const lastWeek = getWorkoutsLastWeek().length;
-
-    if (thisWeek === 0 && lastWeek === 0)
-        return "Noch keine Daten vorhanden";
-
-    if (thisWeek > lastWeek)
-        return `+${thisWeek - lastWeek} Trainings mehr als letzte Woche`;
-
-    if (thisWeek < lastWeek)
-        return `${lastWeek - thisWeek} Trainings weniger als letzte Woche`;
-
-    return "Gleich viele Trainings wie letzte Woche";
+    return weeklyComparisonText(getWorkoutsThisWeek().length, getWorkoutsLastWeek().length);
 }
 
 // ---------------------------------------------------------
 // BACKUP CENTER
 // ---------------------------------------------------------
+function openChangelog() {
+    const entriesHtml = CHANGELOG.map(entry => `
+        <div class="changelog-entry">
+            <div class="changelog-version">v${entry.version}</div>
+            <div class="changelog-date">${entry.date}</div>
+            <ul class="changelog-notes">
+                ${entry.notes.map(n => `<li>${n}</li>`).join("")}
+            </ul>
+        </div>
+    `).join("");
+
+    openPopup(`
+        <h2 style="margin-bottom:16px;">📋 Patch Notes</h2>
+        ${entriesHtml}
+        <button onclick="closePopup()" style="width:100%; margin-top:8px;">Schließen</button>
+    `);
+}
+
 function openSettingsMenu() {
     const html = `
-        <h2>Backup & Import – v${APP_VERSION}</h2>
+        <h2>Einstellungen – v${APP_VERSION}</h2>
 
-        <h3>📦 Gesamte Datenbank</h3>
+        <h3>📦 Export / Import</h3>
         <button onclick="exportAll()">📤 Alles exportieren (JSON)</button>
         <input type="file" accept="application/json" onchange="handleImportFile(event)">
-
-
-        <hr>
-
-        <h3>📤 Einzel-Export</h3>
-        <strong>Trainingspläne:</strong><br>
-        ${plans.map((p, i) => `
-            <button onclick="exportSinglePlan(${i})">${p.name}</button>
-        `).join("")}
-
-        <br><br>
-        <strong>Übungen:</strong><br>
-        ${exercises.map((ex, i) => `
-            <button onclick="exportSingleExercise(${i})">${ex.name}</button>
-        `).join("")}
-
-        <br><br>
-        <strong>Workouts:</strong><br>
-        ${workouts.map((w, i) => `
-            <button onclick="exportSingleWorkout(${i})">${w.plan} – ${w.date}</button>
-        `).join("")}
-
-        <hr>
-
-        <h3>📥 Einzel-Import</h3>
-        <input type="file" accept="application/json" onchange="importSingle(event)" />
 
         <hr>
 
@@ -1282,16 +1416,17 @@ function exportAll() {
     downloadJSON(data, "backup-all-v" + APP_VERSION + ".json");
 }
 
-function downloadJSON(obj, filename) {
-    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
-
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     a.click();
-
     URL.revokeObjectURL(url);
+}
+
+function downloadJSON(obj, filename) {
+    downloadBlob(new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" }), filename);
 }
 
 function importAll(json) {
@@ -1370,11 +1505,7 @@ function mergeExercises(importedExercises) {
         let existing = exercises.find(e => e.name.toLowerCase() === name.toLowerCase());
 
         if (!existing) {
-            existing = {
-                id: "ex_" + Math.random().toString(36).substr(2, 9),
-                name,
-                category
-            };
+            existing = { id: generateId(), name, category };
             exercises.push(existing);
         }
 
@@ -1452,7 +1583,7 @@ function mergeWorkouts(importedWorkouts, importedExercises = []) {
 
             if (!existing) {
                 existing = {
-                    id: "ex_" + Math.random().toString(36).substr(2, 9),
+                    id: generateId(),
                     name,
                     category: planCategory
                 };
@@ -1468,74 +1599,6 @@ function mergeWorkouts(importedWorkouts, importedExercises = []) {
 }
 
 
-// ---------------------------------------------------------
-// SINGLE EXPORT
-// ---------------------------------------------------------
-function exportSinglePlan(i) {
-    downloadJSON({ type: "plan", value: plans[i] }, `plan-${plans[i].name}.json`);
-}
-
-function exportSingleExercise(i) {
-    downloadJSON({ type: "exercise", value: exercises[i] }, `exercise-${exercises[i].name}.json`);
-}
-
-function exportSingleWorkout(i) {
-    downloadJSON({ type: "workout", value: workouts[i] }, `workout-${workouts[i].date}.json`);
-}
-
-// ---------------------------------------------------------
-// SINGLE IMPORT
-// ---------------------------------------------------------
-function importSingle(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-
-    reader.onload = e => {
-        try {
-            let text = e.target.result;
-
-            text = text.replace(/^\uFEFF/, "");
-            text = text.replace(/[\u200B-\u200D\uFEFF]/g, "");
-
-            const data = JSON.parse(text);
-
-            console.log("Einzel-Import JSON:", data);
-
-            if (data.type === "category") {
-                mergeCategories([data.value]);
-            }
-
-            else if (data.type === "exercise") {
-                mergeExercises([data.value]);
-            }
-
-            else if (data.type === "plan") {
-                mergePlans([data.value]);
-            }
-
-            else if (data.type === "workout") {
-                mergeWorkouts([data.value]);
-            }
-
-            else {
-                alert("Unbekannter Einzel-Import-Typ: " + data.type);
-                return;
-            }
-
-            save();
-            renderAll();
-
-            alert("Einzel-Import erfolgreich!");
-        } catch (err) {
-            console.error("IMPORT FEHLER (Single):", err);
-            alert("Ungültige Datei!");
-        }
-    };
-
-    reader.readAsText(file);
-}
 
 function deleteAllAppData() {
     const ok = confirm("Willst du wirklich ALLE Daten löschen? Übungen, Kategorien, Pläne, Workouts und Tracking werden unwiderruflich entfernt.");
@@ -1590,15 +1653,75 @@ function exportCSVPlans() {
 }
 
 function downloadCSV(text, filename) {
-    const blob = new Blob([text], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
+    downloadBlob(new Blob([text], { type: "text/csv" }), filename);
+}
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
+// ---------------------------------------------------------
+// PERSONAL RECORDS
+// ---------------------------------------------------------
+function getExercisePR(exerciseId) {
+    let maxWeight = 0;
+    workouts.forEach(w => {
+        w.exercises.forEach(ex => {
+            if (ex.id === exerciseId) {
+                ex.sets.forEach(s => { if (s.weight > maxWeight) maxWeight = s.weight; });
+            }
+        });
+    });
+    return maxWeight;
+}
 
-    URL.revokeObjectURL(url);
+function showPRToast(weight) {
+    const existing = document.querySelector(".pr-toast");
+    if (existing) existing.remove();
+    const toast = document.createElement("div");
+    toast.className = "pr-toast";
+    toast.textContent = `🏆 Neuer Rekord: ${weight} kg!`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+// ---------------------------------------------------------
+// EXERCISE DETAIL VIEW
+// ---------------------------------------------------------
+function showExerciseDetail(exerciseId) {
+    const exInfo = exercises.find(e => e.id === exerciseId);
+    const name = exInfo ? exInfo.name : "Unbekannte Übung";
+    const pr = getExercisePR(exerciseId);
+
+    const relevant = workouts
+        .filter(w => w.exercises.some(ex => ex.id === exerciseId))
+        .reverse();
+
+    let html = `
+        <h2>${name}</h2>
+        <p>🏆 Persönlicher Rekord: <strong>${pr > 0 ? pr + " kg" : "–"}</strong></p>
+        <hr>
+    `;
+
+    if (relevant.length === 0) {
+        html += `<p>Noch keine Einträge vorhanden.</p>`;
+    } else {
+        relevant.forEach(w => {
+            const ex = w.exercises.find(e => e.id === exerciseId);
+            const volume = ex.sets.reduce((sum, s) => sum + s.weight * s.reps, 0);
+            const bestSet = ex.sets.length > 0 ? Math.max(...ex.sets.map(s => s.weight)) : 0;
+
+            html += `
+                <div class="history-entry">
+                    <strong>${w.date}</strong>${w.plan !== "Freies Training" ? ` – ${w.plan}` : ""}
+                    ${w.duration ? ` <span style="color:#888; font-size:13px;">(${w.duration} min)</span>` : ""}
+                    <br><small style="color:#666;">Bestes Set: ${bestSet} kg · Volumen: ${volume} kg·Wdh</small>
+                    <ul style="margin:4px 0 0 0; padding-left:16px;">
+                        ${ex.sets.map((s, i) => `<li>Satz ${i + 1}: ${s.weight} kg × ${s.reps}</li>`).join("")}
+                    </ul>
+                </div>
+            `;
+        });
+    }
+
+    html += `<button onclick="closePopup()" style="margin-top:20px;">Schließen</button>`;
+    openPopup(html);
 }
 
 // ---------------------------------------------------------
@@ -1615,5 +1738,6 @@ function renderAll() {
 // ---------------------------------------------------------
 // INITIALIZE
 // ---------------------------------------------------------
+document.getElementById("appVersionText").textContent = "Version " + APP_VERSION;
 renderAll();
 showPage("dashboard");
