@@ -4,7 +4,6 @@ self.addEventListener("install", e => {
     self.skipWaiting();
     e.waitUntil(
         caches.open(CACHE).then(cache => cache.addAll([
-            "index.html",
             "style.css",
             "app.js",
             "manifest.json",
