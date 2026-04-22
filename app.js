@@ -146,7 +146,7 @@ function showPage(page) {
 
 function renderDashboard() {
     renderInsights();
-    renderWeeklyHistory();
+    renderHistoryGrouped();
 }
 
 function renderWeeklyHistory() {
@@ -553,6 +553,23 @@ function dropExercise(e, index) {
 }
 
 // ---------------------------------------------------------
+// MOVE EXERCISES (for mobile)
+// ---------------------------------------------------------
+function moveExerciseUp(index) {
+    if (index > 0) {
+        [currentTracking.exercises[index], currentTracking.exercises[index - 1]] = [currentTracking.exercises[index - 1], currentTracking.exercises[index]];
+        renderTracking();
+    }
+}
+
+function moveExerciseDown(index) {
+    if (index < currentTracking.exercises.length - 1) {
+        [currentTracking.exercises[index], currentTracking.exercises[index + 1]] = [currentTracking.exercises[index + 1], currentTracking.exercises[index]];
+        renderTracking();
+    }
+}
+
+// ---------------------------------------------------------
 // TRACKING POPUP EDITOR
 // ---------------------------------------------------------
 function editTrackingExercise(exIndex) {
@@ -780,6 +797,124 @@ function finishWorkout() {
     renderTracking();
     showPage("history");
 }
+
+
+
+let workoutEditIndex = null;
+
+/* ---------------------------------------------------------
+   WORKOUT EDITOR POPUP
+--------------------------------------------------------- */
+
+function openWorkoutEditor(index) {
+    workoutEditIndex = index;
+    const w = workouts[index];
+
+    let html = `<h3>Workout bearbeiten</h3>`;
+
+    w.exercises.forEach((ex, exIndex) => {
+        const exInfo = exercises.find(e => e.id === ex.id);
+        const name = exInfo ? exInfo.name : "Unbekannte Übung";
+
+        html += `
+            <div class="editor-exercise-block" 
+                 style="border:1px solid #ddd; padding:10px; margin-bottom:12px; border-radius:10px;">
+                
+                <h4 style="display:flex; justify-content:space-between; align-items:center;">
+                    ${name}
+                    <button onclick="deleteEditorExercise(${exIndex})" class="delete-btn">❌</button>
+                </h4>
+        `;
+
+        ex.sets.forEach((set, setIndex) => {
+            html += `
+                <div class="set-edit-row" 
+                     style="display:flex; gap:10px; margin-bottom:8px; align-items:center;">
+                    
+                    <label>Gewicht:</label>
+                    <input type="number" id="edit_weight_${exIndex}_${setIndex}" 
+                           value="${set.weight}" style="width:70px;">
+                    
+                    <label>Wdh:</label>
+                    <input type="number" id="edit_reps_${exIndex}_${setIndex}" 
+                           value="${set.reps}" style="width:70px;">
+                    
+                    <button onclick="deleteEditorSet(${exIndex}, ${setIndex})" 
+                            class="delete-btn">🗑️</button>
+                </div>
+            `;
+        });
+
+        html += `
+                <button onclick="addEditorSet(${exIndex})" 
+                        class="popup-save-btn">➕ Satz hinzufügen</button>
+            </div>
+        `;
+    });
+
+    html += `
+        <button onclick="saveWorkoutEditor()" class="popup-save-btn">Speichern</button>
+        <button onclick="closePopup()" class="popup-cancel-btn">Abbrechen</button>
+    `;
+
+    openPopup(html);
+}
+
+/* ---------------------------------------------------------
+   SET LÖSCHEN
+--------------------------------------------------------- */
+
+function deleteEditorSet(exIndex, setIndex) {
+    const w = workouts[workoutEditIndex];
+    w.exercises[exIndex].sets.splice(setIndex, 1);
+    openWorkoutEditor(workoutEditIndex); // Popup neu rendern
+}
+
+/* ---------------------------------------------------------
+   SET HINZUFÜGEN
+--------------------------------------------------------- */
+
+function addEditorSet(exIndex) {
+    const w = workouts[workoutEditIndex];
+    w.exercises[exIndex].sets.push({ weight: 0, reps: 0 });
+    openWorkoutEditor(workoutEditIndex); // Popup neu rendern
+}
+
+/* ---------------------------------------------------------
+   ÜBUNG LÖSCHEN
+--------------------------------------------------------- */
+
+function deleteEditorExercise(exIndex) {
+    const w = workouts[workoutEditIndex];
+    w.exercises.splice(exIndex, 1);
+    openWorkoutEditor(workoutEditIndex); // Popup neu rendern
+}
+
+/* ---------------------------------------------------------
+   SPEICHERN
+--------------------------------------------------------- */
+
+function saveWorkoutEditor() {
+    if (workoutEditIndex === null) return;
+
+    const w = workouts[workoutEditIndex];
+
+    w.exercises.forEach((ex, exIndex) => {
+        ex.sets.forEach((set, setIndex) => {
+            const weight = parseFloat(document.getElementById(`edit_weight_${exIndex}_${setIndex}`).value);
+            const reps = parseInt(document.getElementById(`edit_reps_${exIndex}_${setIndex}`).value);
+
+            set.weight = weight;
+            set.reps = reps;
+        });
+    });
+
+    saveAll();
+    renderAll();
+    closePopup();
+}
+
+
 // ---------------------------------------------------------
 // DASHBOARD – WEEK CALCULATION
 // ---------------------------------------------------------
@@ -1058,7 +1193,8 @@ function openSettingsMenu() {
 
         <h3>📦 Gesamte Datenbank</h3>
         <button onclick="exportAll()">📤 Alles exportieren (JSON)</button>
-        <input type="file" accept="application/json" onchange="importAll(event)" />
+        <input type="file" accept="application/json" onchange="handleImportFile(event)">
+
 
         <hr>
 
@@ -1094,6 +1230,7 @@ function openSettingsMenu() {
 
         <hr>
 
+
         <h3>⚙️ System</h3>
         <p>App-Version: ${APP_VERSION}</p>
 
@@ -1102,6 +1239,14 @@ function openSettingsMenu() {
 
     openPopup(html);
 }
+
+function saveAll() {
+    localStorage.setItem("categories", JSON.stringify(categories));
+    localStorage.setItem("exercises", JSON.stringify(exercises));
+    localStorage.setItem("plans", JSON.stringify(plans));
+    localStorage.setItem("workouts", JSON.stringify(workouts));
+}
+
 
 // ---------------------------------------------------------
 // EXPORT / IMPORT
@@ -1130,41 +1275,56 @@ function downloadJSON(obj, filename) {
     URL.revokeObjectURL(url);
 }
 
-function importAll(event) {
+function importAll(json) {
+    try {
+        const data = JSON.parse(json);
+
+        if (!data.version) {
+            alert("Ungültiges Backup: Version fehlt.");
+            return;
+        }
+
+        // 1) ALLE aktuellen Daten löschen
+        categories = [];
+        exercises = [];
+        plans = [];
+        workouts = [];
+
+        // 2) Daten 1:1 übernehmen
+        if (Array.isArray(data.categories)) categories = data.categories;
+        if (Array.isArray(data.exercises)) exercises = data.exercises;
+        if (Array.isArray(data.plans)) plans = data.plans;
+        if (Array.isArray(data.workouts)) workouts = data.workouts;
+
+        // 3) Speichern
+        saveAll();
+
+        // 4) UI neu rendern
+        renderAll();
+
+        alert("Backup erfolgreich importiert!");
+
+    } catch (e) {
+        console.error("IMPORT FEHLER:", e);
+        alert("Fehler beim Import. Datei ungültig.");
+    }
+}
+
+
+function handleImportFile(event) {
     const file = event.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
 
     reader.onload = e => {
-        try {
-			
-            let text = e.target.result;
-
-            // BOM entfernen
-            text = text.replace(/^\uFEFF/, "");
-            text = text.replace(/[\u200B-\u200D\uFEFF]/g, "");
-
-           
-            const data = JSON.parse(text);
-
-            mergeCategories(data.categories || []);
-			mergeExercises(data.exercises || []);
-			mergePlans(data.plans || []);
-			mergeWorkouts(data.workouts || []);
-
-            save();
-            renderAll();
-
-            alert("Import erfolgreich!");
-        } catch (err) {
-            console.error("IMPORT FEHLER:", err);
-            alert("Ungültige Datei!");
-        }
+        const text = e.target.result;
+        importAll(text); // <-- WICHTIG: JSON-String übergeben, NICHT das Event
     };
 
     reader.readAsText(file);
 }
+
 
 
 // ---------------------------------------------------------
@@ -1246,7 +1406,7 @@ function normalizeDate(dateStr) {
     return dateStr;
 }
 
-function mergeWorkouts(importedWorkouts) {
+function mergeWorkouts(importedWorkouts, importedExercises = []) {
     if (!Array.isArray(importedWorkouts)) return;
 
     importedWorkouts.forEach(w => {
@@ -1255,12 +1415,34 @@ function mergeWorkouts(importedWorkouts) {
         const planCategory = w.plan || "Unbekannt";
 
         // Kategorie anlegen
-        const catExists = categories.some(c => c.toLowerCase() === planCategory.toLowerCase());
-        if (!catExists) categories.push(planCategory);
+        if (!categories.some(c => c.toLowerCase() === planCategory.toLowerCase())) {
+            categories.push(planCategory);
+        }
 
-        // Übungen aus dem Workout automatisch anlegen
         w.exercises.forEach(ex => {
-            const name = ex.name.trim();
+
+            // 1) Name direkt vorhanden?
+            let name = ex.name;
+
+            // 2) Name über alte ID aus exercises[] holen
+            if (!name && ex.id) {
+                const foundLocal = exercises.find(e => e.id === ex.id);
+                if (foundLocal) name = foundLocal.name;
+            }
+
+            // 3) Name über importierte exercises holen (WICHTIG!)
+            if (!name && ex.id) {
+                const foundImported = importedExercises.find(e => e.id === ex.id);
+                if (foundImported) name = foundImported.name;
+            }
+
+            // 4) Wenn immer noch kein Name → Warnung + überspringen
+            if (!name) {
+                console.warn("Workout-Exercise ohne Name:", ex);
+                return;
+            }
+
+            name = name.trim();
 
             // Übung suchen oder anlegen
             let existing = exercises.find(e => e.name.toLowerCase() === name.toLowerCase());
@@ -1274,11 +1456,13 @@ function mergeWorkouts(importedWorkouts) {
                 exercises.push(existing);
             }
 
-            // WICHTIG: ID in das Workout schreiben
+            // ID IM WORKOUT ERSETZEN
             ex.id = existing.id;
+
+            // Name entfernen
+            delete ex.name;
         });
 
-        // Workout speichern
         workouts.push(w);
     });
 }
@@ -1355,6 +1539,21 @@ function importSingle(event) {
     reader.readAsText(file);
 }
 
+function deleteAllAppData() {
+    const ok = confirm("Willst du wirklich ALLE Daten löschen? Übungen, Kategorien, Pläne, Workouts und Tracking werden unwiderruflich entfernt.");
+    if (!ok) return;
+
+    exercises = [];
+    categories = [];
+    plans = [];
+    workouts = [];
+    tracking = [];
+
+    localStorage.clear();
+
+    renderAll();
+    alert("Alle App-Daten wurden gelöscht.");
+}
 
 
 // ---------------------------------------------------------
