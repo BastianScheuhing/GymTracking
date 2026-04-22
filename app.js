@@ -570,6 +570,23 @@ function moveExerciseDown(index) {
 }
 
 // ---------------------------------------------------------
+// MOVE EXERCISES (for mobile)
+// ---------------------------------------------------------
+function moveExerciseUp(index) {
+    if (index > 0) {
+        [currentTracking.exercises[index], currentTracking.exercises[index - 1]] = [currentTracking.exercises[index - 1], currentTracking.exercises[index]];
+        renderTracking();
+    }
+}
+
+function moveExerciseDown(index) {
+    if (index < currentTracking.exercises.length - 1) {
+        [currentTracking.exercises[index], currentTracking.exercises[index + 1]] = [currentTracking.exercises[index + 1], currentTracking.exercises[index]];
+        renderTracking();
+    }
+}
+
+// ---------------------------------------------------------
 // TRACKING POPUP EDITOR
 // ---------------------------------------------------------
 function editTrackingExercise(exIndex) {
