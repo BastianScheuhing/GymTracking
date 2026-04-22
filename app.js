@@ -1,7 +1,7 @@
 // ---------------------------------------------------------
 // VERSION
 // ---------------------------------------------------------
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.2.1";
 
 // ---------------------------------------------------------
 // DATA (with ID support)
@@ -64,11 +64,9 @@ function repairMissingExercises() {
     workouts.forEach(w => {
         w.exercises.forEach(ex => {
 
-            // Übung existiert?
             const found = exercises.find(e => e.id === ex.id);
 
             if (!found) {
-                // Automatisch anlegen
                 exercises.push({
                     id: ex.id,
                     name: ex.name ? ex.name : "Unbekannte Übung",
@@ -90,6 +88,7 @@ repairMissingExercises();
 
 // ---------------------------------------------------------
 // SAVE
+// BUG FIX #1: removed duplicate saveAll() — everything now calls save()
 // ---------------------------------------------------------
 function save() {
     localStorage.setItem("categories", JSON.stringify(categories));
@@ -150,7 +149,6 @@ function renderDashboard() {
 }
 
 function renderWeeklyHistory() {
-    // Falls du eine Wochenansicht hast:
     if (typeof renderHistory === "function") {
         renderHistory();
     }
@@ -158,7 +156,7 @@ function renderWeeklyHistory() {
 
 
 // ---------------------------------------------------------
-// HISTORIE (unchanged for now)
+// HISTORIE
 // ---------------------------------------------------------
 function renderHistory() {
     const list = document.getElementById("overviewList");
@@ -169,16 +167,21 @@ function renderHistory() {
 
     if (workouts.length === 0) return;
 
-    workouts.forEach((w, index) => {
+    // BUG FIX #2: show newest workouts first
+    const reversed = [...workouts].reverse();
+
+    reversed.forEach((w, index) => {
+        const originalIndex = workouts.length - 1 - index;
+
         list.innerHTML += `
             <li>
-                <div onclick="showWorkoutDetails(${index})" style="flex:1; cursor:pointer;">
+                <div onclick="showWorkoutDetails(${originalIndex})" style="flex:1; cursor:pointer;">
                     <strong>${w.plan}</strong><br>
                     ${w.date}
                 </div>
 
-                <button class="delete-btn" onclick="openWorkoutEditor(${index})">✏️</button>
-                <button class="delete-btn" onclick="deleteWorkout(${index})">🗑️</button>
+                <button class="delete-btn" onclick="openWorkoutEditor(${originalIndex})">✏️</button>
+                <button class="delete-btn" onclick="deleteWorkout(${originalIndex})">🗑️</button>
             </li>
         `;
     });
@@ -189,7 +192,9 @@ function showWorkoutDetails(index) {
     const details = document.getElementById("overviewDetails");
 
     document.querySelectorAll("#overviewList li").forEach(li => li.classList.remove("overview-highlight"));
-    const listItem = document.querySelector(`#overviewList li:nth-child(${index + 1})`);
+
+    const reversedIndex = workouts.length - 1 - index;
+    const listItem = document.querySelector(`#overviewList li:nth-child(${reversedIndex + 1})`);
     if (listItem) listItem.classList.add("overview-highlight");
 
     let html = `<h3>${w.plan} – ${w.date}</h3>`;
@@ -299,13 +304,11 @@ function renameExercise(id) {
 function deleteExercise(i) {
     const exId = exercises[i].id;
 
-    // Remove from plans
     plans = plans.map(p => ({
         ...p,
         exercises: p.exercises.filter(eId => eId !== exId)
     }));
 
-    // Remove from exercises
     exercises.splice(i, 1);
 
     save();
@@ -433,6 +436,7 @@ function highlightPlan(index) {
     const activeBox = allBoxes[index];
     activeBox.classList.add("active");
 }
+
 // ---------------------------------------------------------
 // TRACKING (with free training + drag & drop)
 // ---------------------------------------------------------
@@ -472,18 +476,21 @@ function toggleTimer() {
 }
 
 // ---------------------------------------------------------
-// MOVE EXERCISES (up/down buttons)
+// MOVE EXERCISES
+// BUG FIX #3: deduplicated — was defined 3 times, now defined once
 // ---------------------------------------------------------
 function moveExerciseUp(index) {
     if (index > 0) {
-        [currentTracking.exercises[index], currentTracking.exercises[index - 1]] = [currentTracking.exercises[index - 1], currentTracking.exercises[index]];
+        [currentTracking.exercises[index], currentTracking.exercises[index - 1]] =
+            [currentTracking.exercises[index - 1], currentTracking.exercises[index]];
         renderTracking();
     }
 }
 
 function moveExerciseDown(index) {
     if (index < currentTracking.exercises.length - 1) {
-        [currentTracking.exercises[index], currentTracking.exercises[index + 1]] = [currentTracking.exercises[index + 1], currentTracking.exercises[index]];
+        [currentTracking.exercises[index], currentTracking.exercises[index + 1]] =
+            [currentTracking.exercises[index + 1], currentTracking.exercises[index]];
         renderTracking();
     }
 }
@@ -497,7 +504,7 @@ function startFreeTraining() {
         date: new Date().toISOString().split("T")[0],
         note: "",
         startTime: new Date(),
-        exercises: [] // empty!
+        exercises: []
     };
 
     currentExerciseIndex = 0;
@@ -514,6 +521,12 @@ function startTracking() {
     if (planIndex === "") return;
 
     const plan = plans[planIndex];
+
+    // BUG FIX #4: guard against empty plans instead of silently starting a broken session
+    if (!plan.exercises || plan.exercises.length === 0) {
+        alert(`Der Plan "${plan.name}" hat noch keine Übungen. Bitte zuerst Übungen im Plan hinzufügen.`);
+        return;
+    }
 
     currentTracking = {
         plan: plan.name,
@@ -567,40 +580,6 @@ function dropExercise(e, index) {
     const item = currentTracking.exercises.splice(dragIndex, 1)[0];
     currentTracking.exercises.splice(index, 0, item);
     renderTracking();
-}
-
-// ---------------------------------------------------------
-// MOVE EXERCISES (for mobile)
-// ---------------------------------------------------------
-function moveExerciseUp(index) {
-    if (index > 0) {
-        [currentTracking.exercises[index], currentTracking.exercises[index - 1]] = [currentTracking.exercises[index - 1], currentTracking.exercises[index]];
-        renderTracking();
-    }
-}
-
-function moveExerciseDown(index) {
-    if (index < currentTracking.exercises.length - 1) {
-        [currentTracking.exercises[index], currentTracking.exercises[index + 1]] = [currentTracking.exercises[index + 1], currentTracking.exercises[index]];
-        renderTracking();
-    }
-}
-
-// ---------------------------------------------------------
-// MOVE EXERCISES (for mobile)
-// ---------------------------------------------------------
-function moveExerciseUp(index) {
-    if (index > 0) {
-        [currentTracking.exercises[index], currentTracking.exercises[index - 1]] = [currentTracking.exercises[index - 1], currentTracking.exercises[index]];
-        renderTracking();
-    }
-}
-
-function moveExerciseDown(index) {
-    if (index < currentTracking.exercises.length - 1) {
-        [currentTracking.exercises[index], currentTracking.exercises[index + 1]] = [currentTracking.exercises[index + 1], currentTracking.exercises[index]];
-        renderTracking();
-    }
 }
 
 // ---------------------------------------------------------
@@ -804,14 +783,26 @@ function nextExercise() {
 
 // ---------------------------------------------------------
 // FINISH WORKOUT
+// BUG FIX #5: replaced native browser prompt() with in-app popup
 // ---------------------------------------------------------
 function finishWorkoutPrompt() {
-    const note = prompt("Optional: Notiz zum Workout hinzufügen:");
-    if (note !== null && note.trim() !== "") currentTracking.note = note.trim();
-    finishWorkout();
+    openPopup(`
+        <h3>Workout beenden</h3>
+        <label>Notiz (optional)</label>
+        <textarea id="workoutNoteInput" style="height:100px; resize:vertical;" placeholder="z.B. Heute gut gefühlt..."></textarea>
+        <div style="margin-top:16px; display:flex; justify-content:space-between;">
+            <button onclick="closePopup()">Abbrechen</button>
+            <button onclick="finishWorkout()">Speichern</button>
+        </div>
+    `);
 }
 
 function finishWorkout() {
+    const noteEl = document.getElementById("workoutNoteInput");
+    if (noteEl && noteEl.value.trim()) {
+        currentTracking.note = noteEl.value.trim();
+    }
+
     workouts.push(currentTracking);
     save();
     currentTracking = null;
@@ -825,6 +816,7 @@ function finishWorkout() {
     const startEl = document.getElementById("trackingStartTime");
     if (startEl) startEl.innerText = "";
 
+    closePopup();
     renderTracking();
     showPage("history");
 }
@@ -898,7 +890,7 @@ function openWorkoutEditor(index) {
 function deleteEditorSet(exIndex, setIndex) {
     const w = workouts[workoutEditIndex];
     w.exercises[exIndex].sets.splice(setIndex, 1);
-    openWorkoutEditor(workoutEditIndex); // Popup neu rendern
+    openWorkoutEditor(workoutEditIndex);
 }
 
 /* ---------------------------------------------------------
@@ -908,7 +900,7 @@ function deleteEditorSet(exIndex, setIndex) {
 function addEditorSet(exIndex) {
     const w = workouts[workoutEditIndex];
     w.exercises[exIndex].sets.push({ weight: 0, reps: 0 });
-    openWorkoutEditor(workoutEditIndex); // Popup neu rendern
+    openWorkoutEditor(workoutEditIndex);
 }
 
 /* ---------------------------------------------------------
@@ -918,11 +910,12 @@ function addEditorSet(exIndex) {
 function deleteEditorExercise(exIndex) {
     const w = workouts[workoutEditIndex];
     w.exercises.splice(exIndex, 1);
-    openWorkoutEditor(workoutEditIndex); // Popup neu rendern
+    openWorkoutEditor(workoutEditIndex);
 }
 
 /* ---------------------------------------------------------
    SPEICHERN
+   BUG FIX #1 continued: saveAll() replaced with save()
 --------------------------------------------------------- */
 
 function saveWorkoutEditor() {
@@ -940,7 +933,7 @@ function saveWorkoutEditor() {
         });
     });
 
-    saveAll();
+    save();
     renderAll();
     closePopup();
 }
@@ -973,7 +966,7 @@ function groupWorkoutsByWeek() {
 }
 
 // ---------------------------------------------------------
-// DASHBOARD – PROGRESSION (Version C)
+// DASHBOARD – PROGRESSION
 // ---------------------------------------------------------
 function getExerciseProgression() {
     const map = {};
@@ -1178,6 +1171,8 @@ function renderHistoryGrouped() {
 
 // ---------------------------------------------------------
 // WEEKLY INSIGHT HELPERS
+// BUG FIX #6: getWorkoutsLastWeek now handles year boundaries correctly
+//             by subtracting 7 days instead of decrementing the week number
 // ---------------------------------------------------------
 function getWorkoutsThisWeek() {
     const now = new Date();
@@ -1190,12 +1185,13 @@ function getWorkoutsThisWeek() {
 }
 
 function getWorkoutsLastWeek() {
-    const now = new Date();
-    const { year, week } = getISOWeek(now);
+    const lastWeekDate = new Date();
+    lastWeekDate.setDate(lastWeekDate.getDate() - 7);
+    const { year, week } = getISOWeek(lastWeekDate);
 
     return workouts.filter(w => {
         const wInfo = getISOWeek(w.date);
-        return wInfo.year === year && wInfo.week === week - 1;
+        return wInfo.year === year && wInfo.week === week;
     });
 }
 
@@ -1261,7 +1257,6 @@ function openSettingsMenu() {
 
         <hr>
 
-
         <h3>⚙️ System</h3>
         <p>App-Version: ${APP_VERSION}</p>
 
@@ -1269,13 +1264,6 @@ function openSettingsMenu() {
     `;
 
     openPopup(html);
-}
-
-function saveAll() {
-    localStorage.setItem("categories", JSON.stringify(categories));
-    localStorage.setItem("exercises", JSON.stringify(exercises));
-    localStorage.setItem("plans", JSON.stringify(plans));
-    localStorage.setItem("workouts", JSON.stringify(workouts));
 }
 
 
@@ -1315,22 +1303,17 @@ function importAll(json) {
             return;
         }
 
-        // 1) ALLE aktuellen Daten löschen
         categories = [];
         exercises = [];
         plans = [];
         workouts = [];
 
-        // 2) Daten 1:1 übernehmen
         if (Array.isArray(data.categories)) categories = data.categories;
         if (Array.isArray(data.exercises)) exercises = data.exercises;
         if (Array.isArray(data.plans)) plans = data.plans;
         if (Array.isArray(data.workouts)) workouts = data.workouts;
 
-        // 3) Speichern
-        saveAll();
-
-        // 4) UI neu rendern
+        save();
         renderAll();
 
         alert("Backup erfolgreich importiert!");
@@ -1350,7 +1333,7 @@ function handleImportFile(event) {
 
     reader.onload = e => {
         const text = e.target.result;
-        importAll(text); // <-- WICHTIG: JSON-String übergeben, NICHT das Event
+        importAll(text);
     };
 
     reader.readAsText(file);
@@ -1381,11 +1364,9 @@ function mergeExercises(importedExercises) {
         const name = ex.name.trim();
         const category = ex.category?.trim() || "Unbekannt";
 
-        // Kategorie anlegen
         const catExists = categories.some(c => c.toLowerCase() === category.toLowerCase());
         if (!catExists) categories.push(category);
 
-        // Existiert die Übung bereits?
         let existing = exercises.find(e => e.name.toLowerCase() === name.toLowerCase());
 
         if (!existing) {
@@ -1397,7 +1378,6 @@ function mergeExercises(importedExercises) {
             exercises.push(existing);
         }
 
-        // WICHTIG: ID zurückgeben, damit Workouts korrekt verknüpft werden
         ex._importedId = existing.id;
     });
 }
@@ -1423,13 +1403,11 @@ function mergePlans(imported) {
 function normalizeDate(dateStr) {
     if (!dateStr) return new Date().toISOString().split("T")[0];
 
-    // DD.MM.YYYY → YYYY-MM-DD
     if (dateStr.includes(".")) {
         const [d, m, y] = dateStr.split(".");
         return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
     }
 
-    // YYYY/MM/DD → YYYY-MM-DD
     if (dateStr.includes("/")) {
         return dateStr.replace(/\//g, "-");
     }
@@ -1445,29 +1423,24 @@ function mergeWorkouts(importedWorkouts, importedExercises = []) {
 
         const planCategory = w.plan || "Unbekannt";
 
-        // Kategorie anlegen
         if (!categories.some(c => c.toLowerCase() === planCategory.toLowerCase())) {
             categories.push(planCategory);
         }
 
         w.exercises.forEach(ex => {
 
-            // 1) Name direkt vorhanden?
             let name = ex.name;
 
-            // 2) Name über alte ID aus exercises[] holen
             if (!name && ex.id) {
                 const foundLocal = exercises.find(e => e.id === ex.id);
                 if (foundLocal) name = foundLocal.name;
             }
 
-            // 3) Name über importierte exercises holen (WICHTIG!)
             if (!name && ex.id) {
                 const foundImported = importedExercises.find(e => e.id === ex.id);
                 if (foundImported) name = foundImported.name;
             }
 
-            // 4) Wenn immer noch kein Name → Warnung + überspringen
             if (!name) {
                 console.warn("Workout-Exercise ohne Name:", ex);
                 return;
@@ -1475,7 +1448,6 @@ function mergeWorkouts(importedWorkouts, importedExercises = []) {
 
             name = name.trim();
 
-            // Übung suchen oder anlegen
             let existing = exercises.find(e => e.name.toLowerCase() === name.toLowerCase());
 
             if (!existing) {
@@ -1487,10 +1459,7 @@ function mergeWorkouts(importedWorkouts, importedExercises = []) {
                 exercises.push(existing);
             }
 
-            // ID IM WORKOUT ERSETZEN
             ex.id = existing.id;
-
-            // Name entfernen
             delete ex.name;
         });
 
@@ -1527,7 +1496,6 @@ function importSingle(event) {
         try {
             let text = e.target.result;
 
-            // BOM entfernen
             text = text.replace(/^\uFEFF/, "");
             text = text.replace(/[\u200B-\u200D\uFEFF]/g, "");
 
@@ -1535,7 +1503,6 @@ function importSingle(event) {
 
             console.log("Einzel-Import JSON:", data);
 
-            // --- NEU: type-basiertes Importieren ---
             if (data.type === "category") {
                 mergeCategories([data.value]);
             }
@@ -1578,7 +1545,6 @@ function deleteAllAppData() {
     categories = [];
     plans = [];
     workouts = [];
-    tracking = [];
 
     localStorage.clear();
 
