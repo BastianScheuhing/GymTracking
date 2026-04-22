@@ -472,6 +472,23 @@ function toggleTimer() {
 }
 
 // ---------------------------------------------------------
+// MOVE EXERCISES (up/down buttons)
+// ---------------------------------------------------------
+function moveExerciseUp(index) {
+    if (index > 0) {
+        [currentTracking.exercises[index], currentTracking.exercises[index - 1]] = [currentTracking.exercises[index - 1], currentTracking.exercises[index]];
+        renderTracking();
+    }
+}
+
+function moveExerciseDown(index) {
+    if (index < currentTracking.exercises.length - 1) {
+        [currentTracking.exercises[index], currentTracking.exercises[index + 1]] = [currentTracking.exercises[index + 1], currentTracking.exercises[index]];
+        renderTracking();
+    }
+}
+
+// ---------------------------------------------------------
 // START: PLAN OR FREE TRAINING
 // ---------------------------------------------------------
 function startFreeTraining() {
@@ -751,15 +768,12 @@ function renderTracking() {
             ${currentTracking.exercises.map((ex, idx) => {
                 const info = exercises.find(e => e.id === ex.id);
                 return `
-                    <li class="track-exercise"
-                        draggable="true"
-                        ondragstart="dragStart(event, ${idx})"
-                        ondragover="dragOver(event)"
-                        ondrop="dropExercise(event, ${idx})"
-                        style="display:flex; justify-content:space-between; align-items:center;">
-                        
+                    <li class="track-exercise" style="display:flex; justify-content:space-between; align-items:center;">
                         <span>${info ? info.name : "Unbekannt"}</span>
-                        <span style="cursor:grab; font-size:20px;">⋮⋮</span>
+                        <div style="display:flex; align-items:center;">
+                            <button onclick="moveExerciseUp(${idx})" style="font-size:16px; margin:0 2px;">↑</button>
+                            <button onclick="moveExerciseDown(${idx})" style="font-size:16px; margin:0 2px;">↓</button>
+                        </div>
                     </li>
                 `;
             }).join("")}
