@@ -1,14 +1,16 @@
 const CACHE = "gym-tracker-cache-v2";
 
 self.addEventListener("install", e => {
-    self.skipWaiting();
     e.waitUntil(
-        caches.open(CACHE).then(cache => cache.addAll([
-            "style.css",
-            "app.js",
-            "manifest.json",
-            "icon.png"
-        ]))
+        caches.open(CACHE)
+            .then(cache => cache.addAll([
+                "index.html",
+                "style.css",
+                "app.js",
+                "manifest.json",
+                "icon.png"
+            ]))
+            .then(() => self.skipWaiting())
     );
 });
 

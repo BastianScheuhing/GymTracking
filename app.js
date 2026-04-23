@@ -1,9 +1,26 @@
 ﻿// ---------------------------------------------------------
 // VERSION
 // ---------------------------------------------------------
-const APP_VERSION = "1.2.1";
+const APP_VERSION = "1.2.2";
 
 const CHANGELOG = [
+    {
+        version: "1.2.2",
+        date: "2026-04-23",
+        notes: [
+            "Pläne öffnen automatisch nach Erstellung und bleiben bei Übungs-Hinzufügen offen",
+            "Kategorie-Filter und Suchfunktion im Übungs-Dropdown für Pläne",
+            "Nur nicht hinzugefügte Übungen im Plan-Dropdown angezeigt",
+            "Kategorien in Plänen mit Checkmark (✓) markiert, wenn alle Übungen hinzugefügt",
+            "Übungs-Kategorien im Übungen-Tab sind jetzt kollapsierbar",
+            "Pläne können umbenannt werden (✏️ Button)",
+            "Modernisiertes Popup-Design mit Animationen und besseren Buttons",
+            "Workout-Editor überarbeitet mit modernem Design",
+            "Übungen können zu bereits beendeten Workouts hinzugefügt werden",
+            "Notizen von Workouts im Editor bearbeitbar",
+            "Zoom auf Mobile-Geräten deaktiviert für bessere App-Erfahrung",
+        ]
+    },
     {
         version: "1.2.1",
         date: "2026-04-22",
@@ -149,9 +166,33 @@ function save() {
 // ---------------------------------------------------------
 // POPUP SYSTEM
 // ---------------------------------------------------------
-function openPopup(html) {
+function openPopup(html, title = "") {
     const overlay = document.getElementById("popupOverlay");
-    overlay.innerHTML = `<div class="popup-box">${html}</div>`;
+
+    let content = html;
+    let hasHeader = title || (html.includes("<h3>") || html.includes("<h2>"));
+
+    if (hasHeader && title) {
+        const headerMatch = html.match(/<h[23]>[^<]*<\/h[23]>/);
+        if (headerMatch) {
+            content = html.replace(headerMatch[0], "");
+            title = headerMatch[0].replace(/<\/?h[23]>/g, "");
+        }
+    }
+
+    overlay.innerHTML = `
+        <div class="popup-box">
+            ${hasHeader ? `
+            <div class="popup-header">
+                <h3>${title || ""}</h3>
+                <button class="popup-close-btn" onclick="closePopup()">×</button>
+            </div>
+            ` : ""}
+            <div class="popup-content">
+                ${content}
+            </div>
+        </div>
+    `;
     overlay.style.display = "flex";
 }
 
@@ -342,9 +383,11 @@ function renameExercisePopup(id) {
     openPopup(`
         <h3>Übung umbenennen</h3>
         <input id="renameInput" value="${ex.name}">
-        <button onclick="renameExercise('${id}')">Speichern</button>
-        <button onclick="closePopup()">Abbrechen</button>
-    `);
+        <div class="popup-footer">
+            <button onclick="closePopup()">Abbrechen</button>
+            <button onclick="renameExercise('${id}')">Speichern</button>
+        </div>
+    `, "Übung umbenennen");
 }
 
 function renameExercise(id) {
@@ -398,21 +441,25 @@ function renderExercises() {
 
     Object.keys(groups).sort().forEach(category => {
         const items = groups[category];
+        const safeId = "exGroup_" + category.replace(/\s+/g, "_");
         list.innerHTML += `
             <div class="ex-group">
-                <div class="ex-group-header">
+                <div class="ex-group-header" onclick="toggleCollapse('${safeId}')">
+                    <span id="arrow-${safeId}">▾</span>
                     <span>${category}</span>
                     <span class="ex-group-count">${items.length}</span>
                 </div>
-                ${items.map(({ ex, i }) => `
-                    <div class="ex-item">
-                        <span class="ex-item-name">${ex.name}</span>
-                        <div class="ex-item-actions">
-                            <button class="ex-icon-btn" onclick="renameExercisePopup('${ex.id}')">✏️</button>
-                            <button class="ex-icon-btn ex-delete" onclick="deleteExercise(${i})">🗑️</button>
+                <div id="${safeId}" class="ex-group-items">
+                    ${items.map(({ ex, i }) => `
+                        <div class="ex-item">
+                            <span class="ex-item-name">${ex.name}</span>
+                            <div class="ex-item-actions">
+                                <button class="ex-icon-btn" onclick="renameExercisePopup('${ex.id}')">✏️</button>
+                                <button class="ex-icon-btn ex-delete" onclick="deleteExercise(${i})">🗑️</button>
+                            </div>
                         </div>
-                    </div>
-                `).join("")}
+                    `).join("")}
+                </div>
             </div>
         `;
     });
@@ -429,6 +476,30 @@ function createPlan() {
     document.getElementById("planName").value = "";
     save();
     renderPlans();
+    toggleCollapse("plan_" + (plans.length - 1));
+}
+
+function renamePlanPopup(index) {
+    const plan = plans[index];
+    openPopup(`
+        <h3>Plan umbenennen</h3>
+        <input id="renameInput" value="${plan.name}">
+        <div class="popup-footer">
+            <button onclick="closePopup()">Abbrechen</button>
+            <button onclick="renamePlan(${index})">Speichern</button>
+        </div>
+    `, "Plan umbenennen");
+}
+
+function renamePlan(index) {
+    const newName = document.getElementById("renameInput").value.trim();
+    if (!newName) return;
+
+    plans[index].name = newName;
+    save();
+    closePopup();
+    renderPlans();
+    renderTracking();
 }
 
 function deletePlan(i) {
@@ -446,25 +517,28 @@ function addExerciseToPlan(planIndex) {
     if (!plans[planIndex].exercises.includes(exerciseId)) {
         plans[planIndex].exercises.push(exerciseId);
         save();
-        renderPlans();
     }
+    renderPlans();
+    toggleCollapse("plan_" + planIndex);
 }
 
 function removeExerciseFromPlan(planIndex, exerciseId) {
     plans[planIndex].exercises = plans[planIndex].exercises.filter(id => id !== exerciseId);
     save();
     renderPlans();
+    toggleCollapse("plan_" + planIndex);
 }
 
 function renderPlans() {
     const list = document.getElementById("planList");
     const select = document.getElementById("trackingPlanSelect");
 
-    const exerciseOptions = exercises
-        .map(ex => `<option value="${ex.id}">${ex.name}</option>`)
-        .join("");
-
     list.innerHTML = plans.map((p, i) => {
+        const availableExercises = exercises.filter(ex => !p.exercises.includes(ex.id));
+        const exerciseOptions = availableExercises
+            .map(ex => `<option value="${ex.id}">${ex.name}</option>`)
+            .join("");
+
         const chipsHtml = p.exercises.map(exId => {
             const ex = exercises.find(e => e.id === exId);
             return `
@@ -475,27 +549,67 @@ function renderPlans() {
             `;
         }).join("");
 
+        const categoryOptions = categories.map(c => {
+            const total = exercises.filter(ex => ex.category === c).length;
+            const added = exercises.filter(ex => ex.category === c && p.exercises.includes(ex.id)).length;
+            const full  = total > 0 && added === total;
+            return `<option value="${c}" ${full ? "disabled" : ""}>${c}${full ? " ✓" : ""}</option>`;
+        }).join("");
+
         return `
             <div class="plan-card" id="planBox_${i}">
                 <div class="plan-card-header" onclick="toggleCollapse('plan_${i}'); highlightPlan(${i});">
                     <span class="plan-card-title">${p.name}</span>
                     <div style="display:flex; align-items:center; gap:8px;">
                         <span id="arrow-plan_${i}">▸</span>
+                        <button class="ex-icon-btn" onclick="renamePlanPopup(${i}); event.stopPropagation();">✏️</button>
                         <button class="ex-icon-btn" onclick="deletePlan(${i}); event.stopPropagation();">🗑️</button>
                     </div>
                 </div>
                 <div id="plan_${i}" class="plan-card-body" style="display:none;">
                     <div class="plan-exercises">${chipsHtml || `<span style="color:#aaa; font-size:14px;">Noch keine Übungen</span>`}</div>
-                    <div style="display:flex; gap:8px;">
-                        <select id="planAdd_${i}" style="flex:1; margin:0;">${exerciseOptions}</select>
-                        <button onclick="addExerciseToPlan(${i})" style="margin:0; white-space:nowrap;">+ Hinzufügen</button>
-                    </div>
+                    ${availableExercises.length ? `
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                        <div style="display:flex; gap:8px;">
+                            <select id="planCat_${i}" onchange="filterPlanExercises(${i})" style="flex:1; margin:0;">
+                                <option value="">Alle Kategorien</option>
+                                ${categoryOptions}
+                            </select>
+                            <input id="planSearch_${i}" type="text" placeholder="Suchen…" oninput="filterPlanExercises(${i})" style="flex:1; margin:0;">
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <select id="planAdd_${i}" style="flex:1; margin:0;">${exerciseOptions}</select>
+                            <button onclick="addExerciseToPlan(${i})" style="margin:0; white-space:nowrap;">+ Hinzufügen</button>
+                        </div>
+                    </div>` : `<span style="color:#aaa; font-size:13px;">Alle Übungen bereits hinzugefügt</span>`}
                 </div>
             </div>
         `;
     }).join("");
 
     select.innerHTML = plans.map((p, i) => `<option value="${i}">${p.name}</option>`).join("");
+}
+
+function filterPlanExercises(planIndex) {
+    const catEl    = document.getElementById("planCat_"    + planIndex);
+    const searchEl = document.getElementById("planSearch_" + planIndex);
+    const selectEl = document.getElementById("planAdd_"    + planIndex);
+    if (!catEl || !searchEl || !selectEl) return;
+
+    const category = catEl.value;
+    const search   = searchEl.value.toLowerCase();
+    const plan     = plans[planIndex];
+
+    const filtered = exercises.filter(ex => {
+        if (plan.exercises.includes(ex.id)) return false;
+        if (category && ex.category !== category) return false;
+        if (search && !ex.name.toLowerCase().includes(search)) return false;
+        return true;
+    });
+
+    selectEl.innerHTML = filtered.length
+        ? filtered.map(ex => `<option value="${ex.id}">${ex.name}</option>`).join("")
+        : `<option value="" disabled>Keine Übungen gefunden</option>`;
 }
 
 function highlightPlan(index) {
@@ -876,11 +990,11 @@ function finishWorkoutPrompt() {
         <h3>Workout beenden</h3>
         <label>Notiz (optional)</label>
         <textarea id="workoutNoteInput" style="height:100px; resize:vertical;" placeholder="z.B. Heute gut gefühlt..."></textarea>
-        <div style="margin-top:16px; display:flex; justify-content:space-between;">
+        <div class="popup-footer">
             <button onclick="closePopup()">Abbrechen</button>
             <button onclick="finishWorkout()">Speichern</button>
         </div>
-    `);
+    `, "Workout beenden");
 }
 
 function finishWorkout() {
@@ -922,54 +1036,108 @@ function openWorkoutEditor(index) {
     workoutEditIndex = index;
     const w = workouts[index];
 
-    let html = `<h3>Workout bearbeiten</h3>`;
+    const noteHtml = `
+        <div style="margin-bottom:20px;">
+            <label style="display:block; margin-bottom:8px; font-weight:500;">Notiz</label>
+            <textarea id="workoutEditorNote" placeholder="z.B. Heute gut gefühlt..."
+                      style="width:100%; height:80px; padding:10px; border:1px solid #ddd; border-radius:10px; font-size:14px; resize:vertical; box-sizing:border-box;">${w.note || ""}</textarea>
+        </div>
+    `;
+
+    let contentHtml = noteHtml;
 
     w.exercises.forEach((ex, exIndex) => {
         const exInfo = exercises.find(e => e.id === ex.id);
         const name = exInfo ? exInfo.name : "Unbekannte Übung";
 
-        html += `
-            <div class="editor-exercise-block" 
-                 style="border:1px solid #ddd; padding:10px; margin-bottom:12px; border-radius:10px;">
-                
-                <h4 style="display:flex; justify-content:space-between; align-items:center;">
-                    ${name}
-                    <button onclick="deleteEditorExercise(${exIndex})" class="delete-btn">❌</button>
-                </h4>
+        contentHtml += `
+            <div class="editor-exercise-block" style="margin-bottom:20px; padding:16px; background:#f9f9fb; border-radius:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <h4 style="margin:0; font-size:15px; font-weight:600;">${name}</h4>
+                    <button onclick="deleteEditorExercise(${exIndex})"
+                            style="background:none; border:none; font-size:18px; cursor:pointer; color:#ff3b30; padding:0; margin:0;">×</button>
+                </div>
         `;
 
         ex.sets.forEach((set, setIndex) => {
-            html += `
-                <div class="set-edit-row" 
-                     style="display:flex; gap:10px; margin-bottom:8px; align-items:center;">
-                    
-                    <label>Gewicht:</label>
-                    <input type="number" id="edit_weight_${exIndex}_${setIndex}" 
-                           value="${set.weight}" style="width:70px;">
-                    
-                    <label>Wdh:</label>
-                    <input type="number" id="edit_reps_${exIndex}_${setIndex}" 
-                           value="${set.reps}" style="width:70px;">
-                    
-                    <button onclick="deleteEditorSet(${exIndex}, ${setIndex})" 
-                            class="delete-btn">🗑️</button>
+            contentHtml += `
+                <div class="set-edit-row" style="display:flex; gap:8px; margin-bottom:10px; align-items:center;">
+                    <input type="number" id="edit_weight_${exIndex}_${setIndex}"
+                           value="${set.weight}" placeholder="Gewicht" style="flex:1;">
+                    <input type="number" id="edit_reps_${exIndex}_${setIndex}"
+                           value="${set.reps}" placeholder="Wdh" style="flex:1;">
+                    <button onclick="deleteEditorSet(${exIndex}, ${setIndex})"
+                            style="background:none; border:none; font-size:16px; cursor:pointer; color:#ff3b30; padding:8px; margin:0;">🗑️</button>
                 </div>
             `;
         });
 
-        html += `
-                <button onclick="addEditorSet(${exIndex})" 
-                        class="popup-save-btn">➕ Satz hinzufügen</button>
+        contentHtml += `
+                <button onclick="addEditorSet(${exIndex})"
+                        style="width:100%; margin-top:8px; background:#f0f0f5; color:#007aff; border:none; padding:10px; border-radius:10px; cursor:pointer; font-weight:500;">+ Satz hinzufügen</button>
             </div>
         `;
     });
 
-    html += `
-        <button onclick="saveWorkoutEditor()" class="popup-save-btn">Speichern</button>
-        <button onclick="closePopup()" class="popup-cancel-btn">Abbrechen</button>
+    const addExerciseButton = `
+        <button onclick="addExerciseToWorkoutEditor()"
+                style="width:100%; margin-bottom:20px; background:#007aff; color:white; border:none; padding:12px; border-radius:10px; cursor:pointer; font-weight:500; font-size:15px;">+ Übung hinzufügen</button>
     `;
 
-    openPopup(html);
+    const footerHtml = `
+        <div class="popup-footer">
+            <button onclick="closePopup()">Abbrechen</button>
+            <button onclick="saveWorkoutEditor()">Speichern</button>
+        </div>
+    `;
+
+    openPopup(addExerciseButton + contentHtml + footerHtml, "Workout bearbeiten");
+}
+
+function addExerciseToWorkoutEditor() {
+    const w = workouts[workoutEditIndex];
+    const usedExerciseIds = w.exercises.map(ex => ex.id);
+    const availableExercises = exercises.filter(ex => !usedExerciseIds.includes(ex.id));
+
+    let exerciseOptions = availableExercises
+        .map(ex => `<option value="${ex.id}">${ex.name}</option>`)
+        .join("");
+
+    if (!exerciseOptions) {
+        alert("Alle Übungen sind bereits in diesem Workout.");
+        return;
+    }
+
+    openPopup(`
+        <label>Übung auswählen:</label>
+        <select id="exerciseSelectForWorkout" style="margin-bottom:16px;">
+            <option value="">-- Bitte wählen --</option>
+            ${exerciseOptions}
+        </select>
+        <div class="popup-footer">
+            <button onclick="closePopup()">Abbrechen</button>
+            <button onclick="selectExerciseForWorkout()">Hinzufügen</button>
+        </div>
+    `, "Übung hinzufügen");
+}
+
+function selectExerciseForWorkout() {
+    const select = document.getElementById("exerciseSelectForWorkout");
+    const exerciseId = select.value;
+
+    if (!exerciseId) {
+        alert("Bitte wählen Sie eine Übung aus.");
+        return;
+    }
+
+    const w = workouts[workoutEditIndex];
+    w.exercises.push({
+        id: exerciseId,
+        sets: [{ weight: 0, reps: 0 }]
+    });
+
+    closePopup();
+    openWorkoutEditor(workoutEditIndex);
 }
 
 /* ---------------------------------------------------------
@@ -1010,6 +1178,11 @@ function saveWorkoutEditor() {
     if (workoutEditIndex === null) return;
 
     const w = workouts[workoutEditIndex];
+
+    const noteEl = document.getElementById("workoutEditorNote");
+    if (noteEl) {
+        w.note = noteEl.value.trim();
+    }
 
     w.exercises.forEach((ex, exIndex) => {
         ex.sets.forEach((set, setIndex) => {

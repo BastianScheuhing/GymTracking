@@ -7,6 +7,10 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: #f5f5f7;
     color: #333;
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 h2, h3, h4 {
@@ -204,8 +208,9 @@ h3 {
 
 .ex-group-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
+    gap: 8px;
     padding: 9px 16px;
     background: #f0f0f5;
     font-size: 12px;
@@ -213,6 +218,16 @@ h3 {
     letter-spacing: 0.6px;
     text-transform: uppercase;
     color: #666;
+    cursor: pointer;
+    user-select: none;
+}
+
+.ex-group-header span:nth-child(2) {
+    flex: 1;
+}
+
+.ex-group-items {
+    display: block;
 }
 
 .ex-group-count {
@@ -399,35 +414,153 @@ canvas {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0,0,0,0.45);
+    background: rgba(0,0,0,0.5);
     display: none;
     justify-content: center;
     align-items: center;
     padding: 20px;
+    z-index: 1000;
+    animation: popupFadeIn 0.2s ease-out;
+    backdrop-filter: blur(2px);
+}
+
+@keyframes popupFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
 /* ---------------------------------------------------------
-   POPUP BOX (80% Höhe, scrollbar)
+   POPUP BOX (modern card design)
 --------------------------------------------------------- */
 .popup-box {
     width: 90%;
     max-width: 500px;
-    max-height: 80vh;
+    max-height: 85vh;
     overflow-y: auto;
     background: #fff;
-    border-radius: 14px;
-    padding: 20px;
-    box-shadow: 0 0 20px rgba(0,0,0,0.25);
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    display: flex;
+    flex-direction: column;
+    animation: popupSlideUp 0.3s ease-out;
+}
+
+@media (max-width: 600px) {
+    .popup-box {
+        max-height: 65vh;
+    }
+}
+
+@keyframes popupSlideUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 24px 24px 16px 24px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.popup-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+.popup-close-btn {
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    transition: color 0.2s;
+}
+
+.popup-close-btn:active {
+    color: #333;
+}
+
+.popup-content {
+    padding: 24px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.popup-content h3 {
+    margin: 0 0 16px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+.popup-content input,
+.popup-content textarea,
+.popup-content select {
+    margin-bottom: 12px;
+}
+
+.popup-content label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #333;
+}
+
+.popup-footer {
+    display: flex;
+    gap: 12px;
+    padding: 16px 24px 24px 24px;
+    border-top: 1px solid #f0f0f0;
+    justify-content: flex-end;
+}
+
+.popup-footer button {
+    flex: 1;
+    min-width: 100px;
+}
+
+.popup-footer button:first-child {
+    background: #f0f0f5;
+    color: #333;
 }
 
 /* Scrollbar */
 .popup-box::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
+}
+
+.popup-box::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .popup-box::-webkit-scrollbar-thumb {
+    background: #e0e0e0;
+    border-radius: 3px;
+}
+
+.popup-box::-webkit-scrollbar-thumb:hover {
     background: #ccc;
-    border-radius: 10px;
 }
 
 .delete-all-btn {
