@@ -748,6 +748,29 @@ function addExerciseToCurrentWorkout() {
     renderTracking();
 }
 
+function filterTrackingExercises() {
+    const catEl    = document.getElementById("trackingCat");
+    const searchEl = document.getElementById("trackingSearch");
+    const selectEl = document.getElementById("addExerciseToWorkoutSelect");
+    if (!catEl || !searchEl || !selectEl) return;
+
+    const category = catEl.value;
+    const search   = searchEl.value.toLowerCase();
+
+    const alreadyAdded = currentTracking.exercises.map(ex => ex.id);
+
+    const filtered = exercises.filter(ex => {
+        if (alreadyAdded.includes(ex.id)) return false;
+        if (category && ex.category !== category) return false;
+        if (search && !ex.name.toLowerCase().includes(search)) return false;
+        return true;
+    });
+
+    selectEl.innerHTML = filtered.length
+        ? filtered.map(ex => `<option value="${ex.id}">${ex.name}</option>`).join("")
+        : `<option value="" disabled>Keine Übungen gefunden</option>`;
+}
+
 // ---------------------------------------------------------
 // DRAG & DROP SORTING
 // ---------------------------------------------------------
@@ -826,13 +849,18 @@ function saveTrackingExercise(exIndex) {
 // ---------------------------------------------------------
 function renderTracking() {
     const area = document.getElementById("trackingArea");
+    const startAreas = document.querySelectorAll(".tracking-start-area");
 
     if (!currentTracking) {
         area.innerHTML = "";
         const startEl = document.getElementById("trackingStartTime");
         if (startEl) startEl.innerText = "";
+        startAreas.forEach(el => el.style.display = "block");
         return;
     }
+
+    // Hide start buttons when workout is active
+    startAreas.forEach(el => el.style.display = "none");
 
     const total = currentTracking.exercises.length;
     const done = currentExerciseIndex;
@@ -841,9 +869,19 @@ function renderTracking() {
         timerSeconds = Math.floor((Date.now() - timerStart) / 1000);
     }
 
-    const exerciseOptions = exercises
+    const alreadyAdded = currentTracking.exercises.map(ex => ex.id);
+    const availableExercises = exercises.filter(ex => !alreadyAdded.includes(ex.id));
+
+    const exerciseOptions = availableExercises
         .map(ex => `<option value="${ex.id}">${ex.name}</option>`)
         .join("");
+
+    const categoryOptions = [...categories].sort().map(c => {
+        const total = exercises.filter(ex => ex.category === c).length;
+        const added = exercises.filter(ex => ex.category === c && alreadyAdded.includes(ex.id)).length;
+        const full  = total === 0 || added === total;
+        return `<option value="${c}" ${full ? "disabled" : ""}>${c}${full ? " ✓" : ""}</option>`;
+    }).join("");
 
     const startEl = document.getElementById("trackingStartTime");
     if (startEl) {
@@ -859,11 +897,46 @@ function renderTracking() {
                 <span id="arrow-addExToWorkout">▸</span>
             </div>
             <div id="addExToWorkout" style="display:none; padding:0 16px 16px;">
-                <select id="addExerciseToWorkoutSelect" style="margin:8px 0 10px;">${exerciseOptions}</select>
-                <button onclick="addExerciseToCurrentWorkout()" style="width:100%; margin:0;">Hinzufügen</button>
+                ${availableExercises.length ? `
+                <div style="display:flex; gap:8px; margin-bottom:10px;">
+                    <select id="trackingCat" onchange="filterTrackingExercises()" style="flex:1; margin:0;">
+                        <option value="">Alle Kategorien</option>
+                        ${categoryOptions}
+                    </select>
+                    <input id="trackingSearch" type="text" placeholder="Suchen…" oninput="filterTrackingExercises()" style="flex:1; margin:0;">
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <select id="addExerciseToWorkoutSelect" style="flex:1; margin:0;">${exerciseOptions}</select>
+                    <button onclick="addExerciseToCurrentWorkout()" style="margin:0; white-space:nowrap;">+ Hinzufügen</button>
+                </div>
+                ` : `<span style="color:#aaa; font-size:13px;">Alle Übungen bereits hinzugefügt</span>`}
             </div>
         </div>
     `;
+
+    // -----------------------------------------------------
+    // NO EXERCISES YET (FREE TRAINING)
+    // -----------------------------------------------------
+    if (total === 0) {
+        area.innerHTML = `
+            <div style="text-align:center; padding:40px 20px;">
+                <div style="font-size:48px; margin-bottom:12px;">➕</div>
+                <div style="font-size:16px; font-weight:600; margin-bottom:8px;">Noch keine Übungen</div>
+                <div style="color:#888; margin-bottom:24px;">Fügen Sie eine Übung hinzu, um zu beginnen</div>
+            </div>
+            ${addExerciseBlock}
+        `;
+        // Auto-open the add exercise section
+        setTimeout(() => {
+            const collapseEl = document.getElementById("addExToWorkout");
+            const arrowEl = document.getElementById("arrow-addExToWorkout");
+            if (collapseEl) {
+                collapseEl.style.display = "block";
+                if (arrowEl) arrowEl.innerText = "▾";
+            }
+        }, 0);
+        return;
+    }
 
     // -----------------------------------------------------
     // FINISHED ALL EXERCISES
@@ -941,7 +1014,10 @@ function renderTracking() {
 
         ${setsChips}
 
-        <button onclick="nextExercise()" style="width:100%; margin:0 0 4px; background:#34c759;">Nächste Übung →</button>
+        <div style="display:flex; gap:8px;">
+            <button onclick="nextExercise()" style="flex:2; margin:0; background:#34c759;">Nächste Übung →</button>
+            <button onclick="finishWorkoutPrompt()" style="flex:1; margin:0; background:#ff3b30;">Workout Beenden 🛑</button>
+        </div>
 
         <div class="tracking-timer" onclick="toggleTimer()">
             <span>⏱️</span>
@@ -986,6 +1062,13 @@ function nextExercise() {
 // FINISH WORKOUT
 // ---------------------------------------------------------
 function finishWorkoutPrompt() {
+    const isComplete = currentExerciseIndex >= currentTracking.exercises.length;
+
+    if (!isComplete) {
+        const warningMsg = `Du hast noch ${currentTracking.exercises.length - currentExerciseIndex} Übung${currentTracking.exercises.length - currentExerciseIndex !== 1 ? "en" : ""} nicht abgeschlossen.\n\nMöchtest du das Workout trotzdem beenden?`;
+        if (!confirm(warningMsg)) return;
+    }
+
     openPopup(`
         <h3>Workout beenden</h3>
         <label>Notiz (optional)</label>
@@ -1408,11 +1491,11 @@ function renderInsights() {
     box.innerHTML = `
         <div class="insight-stats-grid">
             <div class="insight-stat-card">
-                <div class="insight-stat-value">${thisWeekCount}</div>
+                <div class="insight-stat-value">💪 ${thisWeekCount}</div>
                 <div class="insight-stat-label">Diese Woche</div>
             </div>
             <div class="insight-stat-card">
-                <div class="insight-stat-value">${lastWeekCount}</div>
+                <div class="insight-stat-value">📅 ${lastWeekCount}</div>
                 <div class="insight-stat-label">Letzte Woche</div>
             </div>
         </div>
@@ -1516,10 +1599,10 @@ function getWorkoutsLastWeek() {
 }
 
 function weeklyComparisonText(thisWeek, lastWeek) {
-    if (thisWeek === 0 && lastWeek === 0) return "Noch keine Daten vorhanden";
-    if (thisWeek > lastWeek) return `+${thisWeek - lastWeek} Trainings mehr als letzte Woche`;
-    if (thisWeek < lastWeek) return `${lastWeek - thisWeek} Trainings weniger als letzte Woche`;
-    return "Gleich viele Trainings wie letzte Woche";
+    if (thisWeek === 0 && lastWeek === 0) return "ℹ️ Noch keine Daten vorhanden";
+    if (thisWeek > lastWeek) return `📈 +${thisWeek - lastWeek} Trainings mehr als letzte Woche`;
+    if (thisWeek < lastWeek) return `📉 ${lastWeek - thisWeek} Trainings weniger als letzte Woche`;
+    return "➡️ Gleich viele Trainings wie letzte Woche";
 }
 
 function getWeeklyComparison() {
