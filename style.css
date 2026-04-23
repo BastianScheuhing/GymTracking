@@ -1020,6 +1020,15 @@ canvas {
     gap: 2px;
 }
 
+.tracking-ex-item-actions .ex-icon-btn {
+    color: #007aff;
+    font-weight: bold;
+}
+
+.tracking-ex-item.current .tracking-ex-item-actions .ex-icon-btn {
+    color: #0051d5;
+}
+
 .tracking-done-card {
     text-align: center;
     background: #fff;
@@ -1045,3 +1054,90 @@ canvas {
     color: #888;
     margin-bottom: 16px;
 }
+
+/* ---------------------------------------------------------
+   PR SECTION
+--------------------------------------------------------- */
+.pr-section {
+    background: #fff;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.pr-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+
+.pr-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 16px;
+    color: #333;
+}
+
+.pr-header:active {
+    opacity: 0.7;
+}
+
+.pr-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.pr-row:last-child {
+    border-bottom: none;
+}
+
+.pr-row:active {
+    background: #f8f8f8;
+}
+
+.pr-delta {
+    color: #34c759;
+    font-weight: 600;
+    font-size: 13px;
+    margin-left: 8px;
+}
+
+/* ---------------------------------------------------------
+   EXERCISE DETAIL CHART TABS
+--------------------------------------------------------- */
+.detail-chart-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.detail-chart-tab {
+    flex: 1;
+    padding: 10px;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: #999;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 0;
+    border-radius: 0;
+}
+
+.detail-chart-tab.active {
+    color: #007aff;
+    border-bottom-color: #007aff;
+}
+
+.detail-chart-tab:active {
+    opacity: 0.7;
+}
+

@@ -1,9 +1,18 @@
 ﻿// ---------------------------------------------------------
 // VERSION
 // ---------------------------------------------------------
-const APP_VERSION = "1.2.2";
+const APP_VERSION = "1.2.3";
 
 const CHANGELOG = [
+    {
+        version: "1.2.3",
+        date: "2026-04-23",
+        notes: [
+            "🏆 Neue Bestleistungen diesen Monat auf Dashboard",
+            "Geschätztes 1RM in Übungs-Detailansicht (Epley-Formel)",
+            "Erweiterte Übungs-Charts mit Gewicht/1RM Tabs und Datumslabeln"
+        ]
+    },
     {
         version: "1.2.2",
         date: "2026-04-23",
@@ -1455,10 +1464,103 @@ function drawMiniChart(canvasId, values) {
     ctx.fillText(`${values[values.length - 1]} kg`, w - padX, h);
 }
 
+function drawDetailChart(canvasId, data) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || data.length < 2) return;
+
+    canvas.width = canvas.offsetWidth || 400;
+
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width;
+    const h = canvas.height;
+    const padX = 30;
+    const padY = 10;
+    const padBottom = 20;
+    const chartH = h - padY - padBottom;
+    const chartW = w - padX * 2;
+
+    ctx.clearRect(0, 0, w, h);
+
+    const values = data.map(d => d.value);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+
+    const getX = i => padX + (i / (data.length - 1)) * chartW;
+    const getY = v => padY + (1 - (v - min) / range) * chartH;
+
+    const buildCurve = () => {
+        ctx.beginPath();
+        ctx.moveTo(getX(0), getY(values[0]));
+        for (let i = 1; i < values.length; i++) {
+            const x0 = getX(i - 1), y0 = getY(values[i - 1]);
+            const x1 = getX(i), y1 = getY(values[i]);
+            const cpX = (x0 + x1) / 2;
+            ctx.bezierCurveTo(cpX, y0, cpX, y1, x1, y1);
+        }
+    };
+
+    // Gradient fill under the curve
+    buildCurve();
+    ctx.lineTo(getX(data.length - 1), padY + chartH);
+    ctx.lineTo(getX(0), padY + chartH);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, padY, 0, padY + chartH);
+    grad.addColorStop(0, "rgba(0, 122, 255, 0.22)");
+    grad.addColorStop(1, "rgba(0, 122, 255, 0.0)");
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Line
+    buildCurve();
+    ctx.strokeStyle = "#007aff";
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+
+    // Endpoint dot
+    const lx = getX(data.length - 1);
+    const ly = getY(values[data.length - 1]);
+    ctx.beginPath();
+    ctx.arc(lx, ly, 4, 0, Math.PI * 2);
+    ctx.fillStyle = "#007aff";
+    ctx.fill();
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Y-axis labels (min, max)
+    ctx.fillStyle = "#999";
+    ctx.font = "10px sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(Math.round(max), padX - 4, padY + 8);
+    ctx.fillText(Math.round(min), padX - 4, padY + chartH + 4);
+
+    // X-axis date labels (first, middle, last)
+    ctx.textAlign = "center";
+    const formatDate = dateStr => {
+        const d = dateStr.split("-");
+        return `${d[2]}.${d[1]}`;
+    };
+    ctx.fillText(formatDate(data[0].date), getX(0), h - 2);
+    const mid = Math.floor(data.length / 2);
+    ctx.fillText(formatDate(data[mid].date), getX(mid), h - 2);
+    ctx.fillText(formatDate(data[data.length - 1].date), getX(data.length - 1), h - 2);
+}
+
 // ---------------------------------------------------------
 // DASHBOARD – INSIGHTS (with collapsible progression)
 // ---------------------------------------------------------
 let progressionCollapsed = {};
+let prSectionExpanded = false;
+
+function togglePRSection() {
+    prSectionExpanded = !prSectionExpanded;
+    const hidden = document.getElementById("pr-hidden");
+    const arrow = document.getElementById("arrow-pr-section");
+    if (hidden) hidden.style.display = prSectionExpanded ? "block" : "none";
+    if (arrow) arrow.textContent = prSectionExpanded ? "▾" : "▸";
+}
 
 function toggleProgression(id) {
     progressionCollapsed[id] = !progressionCollapsed[id];
@@ -1487,6 +1589,44 @@ function renderInsights() {
     const lastWeekCount = getWorkoutsLastWeek().length;
     const comparison = weeklyComparisonText(thisWeekCount, lastWeekCount);
     const progression = getExerciseProgression();
+    const prs = getPRsThisMonth();
+
+    let prSectionHtml = "";
+    if (prs.length > 0) {
+        const visiblePRs = prs.slice(0, 5);
+        const hiddenPRs = prs.slice(5);
+        const hasMore = hiddenPRs.length > 0;
+
+        prSectionHtml = `
+            <div class="pr-section">
+                <div class="pr-header" onclick="togglePRSection()">
+                    <h3>🏆 Neue Bestleistungen diesen Monat</h3>
+                    <span id="arrow-pr-section">${hasMore ? "▾" : ""}</span>
+                </div>
+                <div id="pr-visible">
+                    ${visiblePRs.map(pr => `
+                        <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
+                            <div>${pr.name}</div>
+                            <div><strong>${pr.newMax} kg</strong> <span class="pr-delta">↑ +${pr.delta} kg</span></div>
+                        </div>
+                    `).join("")}
+                </div>
+                ${hasMore ? `
+                    <div id="pr-hidden" style="display:none;">
+                        ${hiddenPRs.map(pr => `
+                            <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
+                                <div>${pr.name}</div>
+                                <div><strong>${pr.newMax} kg</strong> <span class="pr-delta">↑ +${pr.delta} kg</span></div>
+                            </div>
+                        `).join("")}
+                    </div>
+                    <button onclick="togglePRSection()" style="width:100%; margin-top:8px; font-size:13px;">Mehr anzeigen (${hiddenPRs.length})</button>
+                ` : ""}
+            </div>
+        `;
+    } else {
+        prSectionHtml = `<p style="color:#888; margin:0 0 16px;">Noch keine neuen Bestleistungen diesen Monat.</p>`;
+    }
 
     box.innerHTML = `
         <div class="insight-stats-grid">
@@ -1501,6 +1641,8 @@ function renderInsights() {
         </div>
 
         <div class="insight-compare-card">${comparison}</div>
+
+        ${prSectionHtml}
 
         <div class="progression-card">
             <h3>Progression</h3>
@@ -1913,8 +2055,13 @@ function downloadCSV(text, filename) {
 }
 
 // ---------------------------------------------------------
-// PERSONAL RECORDS
+// PERSONAL RECORDS & PROGRESS CALCULATIONS
 // ---------------------------------------------------------
+function calculateOneRM(weight, reps) {
+    if (reps === 1) return weight;
+    return Math.round((weight * (1 + reps / 30)) * 10) / 10;
+}
+
 function getExercisePR(exerciseId) {
     let maxWeight = 0;
     workouts.forEach(w => {
@@ -1925,6 +2072,77 @@ function getExercisePR(exerciseId) {
         });
     });
     return maxWeight;
+}
+
+function getPRsThisMonth() {
+    const now = new Date();
+    const thisMonthPrefix = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+
+    const prMap = {};
+
+    workouts.forEach(w => {
+        if (w.date.startsWith(thisMonthPrefix)) {
+            w.exercises.forEach(ex => {
+                if (ex.sets.length > 0) {
+                    const maxThisMonth = Math.max(...ex.sets.map(s => s.weight));
+
+                    if (!prMap[ex.id]) {
+                        prMap[ex.id] = maxThisMonth;
+                    } else if (maxThisMonth > prMap[ex.id]) {
+                        prMap[ex.id] = maxThisMonth;
+                    }
+                }
+            });
+        }
+    });
+
+    const prs = [];
+    Object.keys(prMap).forEach(exerciseId => {
+        const maxThisMonth = prMap[exerciseId];
+        let prevBest = 0;
+
+        workouts.forEach(w => {
+            if (!w.date.startsWith(thisMonthPrefix)) {
+                const ex = w.exercises.find(e => e.id === exerciseId);
+                if (ex && ex.sets.length > 0) {
+                    const max = Math.max(...ex.sets.map(s => s.weight));
+                    if (max > prevBest) prevBest = max;
+                }
+            }
+        });
+
+        if (maxThisMonth > prevBest) {
+            const exInfo = exercises.find(e => e.id === exerciseId);
+            prs.push({
+                id: exerciseId,
+                name: exInfo ? exInfo.name : "Unbekannte Übung",
+                newMax: maxThisMonth,
+                prevMax: prevBest,
+                delta: maxThisMonth - prevBest
+            });
+        }
+    });
+
+    return prs.sort((a, b) => b.delta - a.delta);
+}
+
+function getExerciseChartData(exerciseId) {
+    const relevant = workouts
+        .filter(w => w.exercises.some(ex => ex.id === exerciseId))
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    return relevant.map(w => {
+        const ex = w.exercises.find(e => e.id === exerciseId);
+        const bestSet = ex.sets.length > 0 ? Math.max(...ex.sets.map(s => s.weight)) : 0;
+        const bestReps = ex.sets.find(s => s.weight === bestSet)?.reps || 1;
+        const oneRM = calculateOneRM(bestSet, bestReps);
+
+        return {
+            date: w.date,
+            weight: bestSet,
+            oneRM: oneRM
+        };
+    });
 }
 
 function showPRToast(weight) {
@@ -1944,16 +2162,38 @@ function showExerciseDetail(exerciseId) {
     const exInfo = exercises.find(e => e.id === exerciseId);
     const name = exInfo ? exInfo.name : "Unbekannte Übung";
     const pr = getExercisePR(exerciseId);
+    const chartData = getExerciseChartData(exerciseId);
 
     const relevant = workouts
         .filter(w => w.exercises.some(ex => ex.id === exerciseId))
         .reverse();
 
+    let bestSet = { weight: 0, reps: 1 };
+    if (relevant.length > 0) {
+        const ex = relevant[0].exercises.find(e => e.id === exerciseId);
+        const maxWeight = Math.max(...ex.sets.map(s => s.weight));
+        bestSet = ex.sets.find(s => s.weight === maxWeight) || { weight: maxWeight, reps: 1 };
+    }
+    const estimatedOneRM = calculateOneRM(bestSet.weight, bestSet.reps);
+
     let html = `
         <h2>${name}</h2>
         <p>🏆 Persönlicher Rekord: <strong>${pr > 0 ? pr + " kg" : "–"}</strong></p>
+        ${bestSet.weight > 0 ? `<p style="color:#666; font-size:14px;">Bestes Set: ${bestSet.weight} kg × ${bestSet.reps} Wdh<br>Geschätztes 1RM: <strong>${estimatedOneRM} kg</strong></p>` : ""}
         <hr>
     `;
+
+    if (chartData.length > 0) {
+        html += `
+            <div class="detail-chart-tabs">
+                <button class="detail-chart-tab active" onclick="switchChartTab('weight', '${exerciseId}')">Gewicht</button>
+                <button class="detail-chart-tab" onclick="switchChartTab('oneRM', '${exerciseId}')">1RM</button>
+            </div>
+            <canvas id="exerciseDetailChart" height="130" style="width:100%; margin:10px 0;"></canvas>
+        `;
+    }
+
+    html += `<div style="margin-top:10px;"><strong>Verlauf</strong></div>`;
 
     if (relevant.length === 0) {
         html += `<p>Noch keine Einträge vorhanden.</p>`;
@@ -1978,6 +2218,28 @@ function showExerciseDetail(exerciseId) {
 
     html += `<button onclick="closePopup()" style="margin-top:20px;">Schließen</button>`;
     openPopup(html);
+
+    if (chartData.length > 0) {
+        setTimeout(() => {
+            const weightData = chartData.map(d => ({ date: d.date, value: d.weight }));
+            drawDetailChart("exerciseDetailChart", weightData);
+        }, 0);
+    }
+}
+
+function switchChartTab(tab, exerciseId) {
+    const chartData = getExerciseChartData(exerciseId);
+    if (chartData.length === 0) return;
+
+    const tabs = document.querySelectorAll(".detail-chart-tab");
+    tabs.forEach(t => t.classList.remove("active"));
+    event.target.classList.add("active");
+
+    const data = tab === "weight"
+        ? chartData.map(d => ({ date: d.date, value: d.weight }))
+        : chartData.map(d => ({ date: d.date, value: d.oneRM }));
+
+    drawDetailChart("exerciseDetailChart", data);
 }
 
 // ---------------------------------------------------------
