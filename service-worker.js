@@ -1,4 +1,4 @@
-const CACHE = "gym-tracker-cache-v8";
+const CACHE = "gym-tracker-cache-v9";
 
 self.addEventListener("install", e => {
     e.waitUntil(
