@@ -1,9 +1,24 @@
 ﻿// ---------------------------------------------------------
 // VERSION
 // ---------------------------------------------------------
-const APP_VERSION = "1.2.3";
+const APP_VERSION = "1.2.4";
 
 const CHANGELOG = [
+    {
+        version: "1.2.4",
+        date: "2026-04-24",
+        notes: [
+            "Seitenübergänge mit sanfter Fade-Animation",
+            "Übungen im Tracking gleiten beim Hinzufügen ein",
+            "Satz-Chips erscheinen mit Pop-Animation",
+            "Dashboard-Statistiken zählen beim Öffnen hoch",
+            "Konfetti-Feier beim Abschließen aller Übungen",
+            "Historien- und Übungslisten mit gestaffeltem Fade-In",
+            "Aktive Navigation mit animiertem Punkt-Indikator",
+            "Letzte-Einheit-Hinweis während Tracking zeigt vorherige Sätze",
+            "Satz-Chips nach links wischen zum Löschen"
+        ]
+    },
     {
         version: "1.2.3",
         date: "2026-04-23",
@@ -92,6 +107,91 @@ let workouts = JSON.parse(localStorage.getItem("workouts")) || [];
 // ---------------------------------------------------------
 function generateId(prefix = "ex") {
     return prefix + "_" + Math.random().toString(36).substring(2, 10);
+}
+
+// ---------------------------------------------------------
+// ANIMATION UTILITIES
+// ---------------------------------------------------------
+function animateCountUp(el, target, duration = 700) {
+    if (target === 0) { el.textContent = "0"; return; }
+    const start = Date.now();
+    const tick = () => {
+        const progress = Math.min((Date.now() - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        el.textContent = Math.round(eased * target);
+        if (progress < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+}
+
+function showConfetti() {
+    const emojis = ["💪", "🏆", "🔥", "⭐", "✨", "🎉"];
+    for (let i = 0; i < 14; i++) {
+        const el = document.createElement("div");
+        el.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+        el.style.cssText = [
+            "position:fixed",
+            `font-size:${18 + Math.random() * 14}px`,
+            `left:${5 + Math.random() * 90}%`,
+            "top:60%",
+            "z-index:9998",
+            "pointer-events:none",
+            `animation:confettiFly 0.9s ease-out ${i * 0.055}s both`
+        ].join(";");
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 1100 + i * 55);
+    }
+}
+
+function getLastSessionData(exId) {
+    for (let i = workouts.length - 1; i >= 0; i--) {
+        const ex = workouts[i].exercises.find(e => e.id === exId);
+        if (ex && ex.sets.length > 0) {
+            return { date: workouts[i].date, sets: ex.sets };
+        }
+    }
+    return null;
+}
+
+function addSetChipSwipeListeners() {
+    document.querySelectorAll(".tracking-sets .set-chip[data-set-index]").forEach(chip => {
+        let startX = 0;
+
+        chip.addEventListener("touchstart", e => {
+            startX = e.touches[0].clientX;
+            chip.style.transition = "none";
+        }, { passive: true });
+
+        chip.addEventListener("touchmove", e => {
+            const dx = e.touches[0].clientX - startX;
+            if (dx < 0) {
+                e.preventDefault();
+                chip.style.transform = `translateX(${Math.max(dx, -80)}px)`;
+                const pct = Math.min(Math.abs(dx) / 60, 1);
+                chip.style.background = `rgb(${Math.round(240 + 15 * pct)}, ${Math.round(240 - 180 * pct)}, ${Math.round(245 - 215 * pct)})`;
+                chip.style.color = pct > 0.5 ? "#fff" : "";
+            }
+        }, { passive: false });
+
+        chip.addEventListener("touchend", e => {
+            const dx = e.changedTouches[0].clientX - startX;
+            if (dx < -50) {
+                chip.style.transition = "transform 0.18s ease, opacity 0.18s ease";
+                chip.style.transform = "translateX(-130px)";
+                chip.style.opacity = "0";
+                setTimeout(() => {
+                    const idx = parseInt(chip.dataset.setIndex);
+                    currentTracking.exercises[currentExerciseIndex].sets.splice(idx, 1);
+                    renderTracking();
+                }, 180);
+            } else {
+                chip.style.transition = "transform 0.2s ease, background 0.2s ease, color 0.2s ease";
+                chip.style.transform = "translateX(0)";
+                chip.style.background = "";
+                chip.style.color = "";
+            }
+        });
+    });
 }
 
 // ---------------------------------------------------------
@@ -277,7 +377,7 @@ function renderHistory() {
     list.innerHTML = reversed.map((w, index) => {
         const originalIndex = workouts.length - 1 - index;
         return `
-            <div class="history-card">
+            <div class="history-card anim-fade-in" style="animation-delay:${index * 0.05}s">
                 <div class="history-card-main" onclick="showWorkoutDetails(${originalIndex})">
                     <div class="history-card-name">${w.plan}</div>
                     <div class="history-card-meta">${w.date}${w.duration ? ` · ${w.duration} min` : ""}</div>
@@ -448,11 +548,13 @@ function renderExercises() {
         return;
     }
 
+    let groupIndex = 0;
     Object.keys(groups).sort().forEach(category => {
         const items = groups[category];
         const safeId = "exGroup_" + category.replace(/\s+/g, "_");
+        const delay = (groupIndex++ * 0.07).toFixed(2);
         list.innerHTML += `
-            <div class="ex-group">
+            <div class="ex-group anim-fade-in" style="animation-delay:${delay}s">
                 <div class="ex-group-header" onclick="toggleCollapse('${safeId}')">
                     <span id="arrow-${safeId}">▾</span>
                     <span>${category}</span>
@@ -749,12 +851,12 @@ function addExerciseToCurrentWorkout() {
     const id = document.getElementById("addExerciseToWorkoutSelect").value;
     if (!id) return;
 
-    currentTracking.exercises.push({
-        id,
-        sets: []
-    });
-
+    currentTracking.exercises.push({ id, sets: [] });
     renderTracking();
+
+    const items = document.querySelectorAll(".tracking-ex-item");
+    const last = items[items.length - 1];
+    if (last) last.classList.add("anim-slide-in");
 }
 
 function filterTrackingExercises() {
@@ -984,8 +1086,18 @@ function renderTracking() {
     const exInfo = exercises.find(e => e.id === ex.id);
 
     const setsChips = ex.sets.length > 0
-        ? `<div class="tracking-sets">${ex.sets.map((s, i) => `<span class="set-chip">S${i + 1}: ${s.weight}kg × ${s.reps}</span>`).join("")}</div>`
+        ? `<div class="tracking-sets">${ex.sets.map((s, i) => `<span class="set-chip" data-set-index="${i}">S${i + 1}: ${s.weight}kg × ${s.reps}</span>`).join("")}</div>`
         : "";
+
+    const lastSession = getLastSessionData(ex.id);
+    const lastSessionHtml = lastSession ? `
+        <div class="last-session-hint">
+            <div class="last-session-label">Letzte Einheit · ${lastSession.date}</div>
+            <div class="tracking-sets" style="margin:0;">${lastSession.sets.map((s, i) =>
+                `<span class="set-chip">S${i + 1}: ${s.weight}kg × ${s.reps}</span>`
+            ).join("")}</div>
+        </div>
+    ` : "";
 
     const exerciseListHtml = currentTracking.exercises.map((item, idx) => {
         const info = exercises.find(e => e.id === item.id);
@@ -1006,6 +1118,8 @@ function renderTracking() {
             <div class="tracking-ex-name">${exInfo ? exInfo.name : "Unbekannt"}</div>
             <div class="tracking-progress">${done + 1} / ${total}</div>
         </div>
+
+        ${lastSessionHtml}
 
         <div class="tracking-input-card">
             <div class="tracking-input-row">
@@ -1037,6 +1151,8 @@ function renderTracking() {
 
         ${addExerciseBlock}
     `;
+
+    addSetChipSwipeListeners();
 }
 
 // ---------------------------------------------------------
@@ -1054,6 +1170,10 @@ function saveSet() {
     currentTracking.exercises[currentExerciseIndex].sets.push({ weight, reps });
     renderTracking();
 
+    const chips = document.querySelectorAll(".set-chip");
+    const lastChip = chips[chips.length - 1];
+    if (lastChip) lastChip.classList.add("anim-chip-pop");
+
     if (prevPR > 0 && weight > prevPR) {
         showPRToast(weight);
     }
@@ -1065,6 +1185,9 @@ function saveSet() {
 function nextExercise() {
     currentExerciseIndex++;
     renderTracking();
+    if (currentExerciseIndex >= currentTracking.exercises.length) {
+        showConfetti();
+    }
 }
 
 // ---------------------------------------------------------
@@ -1631,11 +1754,11 @@ function renderInsights() {
     box.innerHTML = `
         <div class="insight-stats-grid">
             <div class="insight-stat-card">
-                <div class="insight-stat-value">💪 ${thisWeekCount}</div>
+                <div class="insight-stat-value">💪 <span class="stat-num" data-target="${thisWeekCount}">0</span></div>
                 <div class="insight-stat-label">Diese Woche</div>
             </div>
             <div class="insight-stat-card">
-                <div class="insight-stat-value">📅 ${lastWeekCount}</div>
+                <div class="insight-stat-value">📅 <span class="stat-num" data-target="${lastWeekCount}">0</span></div>
                 <div class="insight-stat-label">Letzte Woche</div>
             </div>
         </div>
@@ -1683,6 +1806,10 @@ function renderInsights() {
         if (!progressionCollapsed[p.id]) {
             drawMiniChart(`chart_${idx}`, p.chartValues);
         }
+    });
+
+    document.querySelectorAll('#insightsBox .stat-num').forEach(el => {
+        animateCountUp(el, parseInt(el.dataset.target));
     });
 }
 
