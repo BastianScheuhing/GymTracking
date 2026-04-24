@@ -26,10 +26,11 @@
 
     <!-- DASHBOARD -->
     <div id="page-dashboard" class="page active">
-        <h2>Dashboard</h2>
-        <div id="insightsBox"></div>
-        <h2 style="font-size:17px; margin:20px 0 10px;">Wochenübersicht</h2>
-        <div id="historyBox"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h2 style="margin:0;">Dashboard</h2>
+            <button onclick="openDashboardSettings()" style="font-size:13px; padding:6px 12px; margin:0; background:#f0f0f5; color:#333;">⚙️ Anpassen</button>
+        </div>
+        <div id="dashboardContent"></div>
     </div>
 
     <!-- HISTORIE -->
@@ -56,6 +57,8 @@
         </div>
 
         <p id="trackingStartTime" style="margin-top:4px; color:#888; font-size:13px;"></p>
+
+        <div id="restTimerCard"></div>
 
         <div id="trackingArea" style="margin-top:8px;"></div>
     </div>

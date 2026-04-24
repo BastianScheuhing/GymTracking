@@ -1110,6 +1110,17 @@ canvas {
     opacity: 0.7;
 }
 
+.pr-count-badge {
+    background: #007aff;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    min-width: 20px;
+    text-align: center;
+}
+
 .pr-row {
     display: flex;
     justify-content: space-between;
@@ -1166,6 +1177,251 @@ canvas {
 
 .detail-chart-tab:active {
     opacity: 0.7;
+}
+
+/* ---------------------------------------------------------
+   VOLUME BAR CHART
+--------------------------------------------------------- */
+.volume-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.volume-label {
+    font-size: 13px;
+    color: #555;
+    width: 80px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.volume-bar-wrap {
+    flex: 1;
+    background: #f0f0f5;
+    border-radius: 6px;
+    height: 10px;
+    overflow: hidden;
+}
+
+.volume-bar {
+    height: 100%;
+    background: #007aff;
+    border-radius: 6px;
+    min-width: 4px;
+    transition: width 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.volume-count {
+    font-size: 13px;
+    font-weight: 700;
+    color: #007aff;
+    width: 24px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------
+   WORKOUT CALENDAR
+--------------------------------------------------------- */
+.cal-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.09);
+    margin-bottom: 14px;
+}
+
+.cal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.cal-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1a1a1a;
+}
+
+.cal-nav-btn {
+    background: #f0f0f5;
+    color: #333;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.cal-nav-btn:active {
+    background: #e0e0e8;
+    opacity: 1;
+}
+
+.cal-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 6px;
+}
+
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+}
+
+.cal-cell {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    border-radius: 8px;
+    color: #333;
+}
+
+.cal-cell.empty {
+    visibility: hidden;
+}
+
+.cal-cell.has-workout {
+    background: #007aff;
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.cal-cell.has-workout:active {
+    opacity: 0.75;
+}
+
+.cal-cell.today {
+    border: 2px solid #007aff;
+    font-weight: 700;
+    color: #007aff;
+}
+
+.cal-cell.has-workout.today {
+    border-color: #0051d5;
+    color: #fff;
+}
+
+/* ---------------------------------------------------------
+   DASHBOARD SETTINGS TOGGLES
+--------------------------------------------------------- */
+.dash-toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f2f2f2;
+}
+
+.dash-order-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.dash-order-btn {
+    background: #f0f0f5;
+    color: #333;
+    border: none;
+    width: 26px;
+    height: 20px;
+    border-radius: 5px;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dash-order-btn:disabled {
+    opacity: 0.25;
+    cursor: default;
+}
+
+.dash-order-btn:not(:disabled):active {
+    background: #007aff;
+    color: #fff;
+    opacity: 1;
+}
+
+.dash-toggle-row:last-of-type {
+    border-bottom: none;
+}
+
+.dash-toggle-label {
+    font-size: 15px;
+    color: #1a1a1a;
+}
+
+.toggle-switch {
+    position: relative;
+    width: 44px;
+    height: 26px;
+    flex-shrink: 0;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: #ccc;
+    border-radius: 26px;
+    transition: background 0.2s;
+}
+
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: #007aff;
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(18px);
 }
 
 /* ---------------------------------------------------------
@@ -1245,5 +1501,135 @@ canvas {
 .anim-fade-in {
     opacity: 0;
     animation: fadeInUp 0.3s ease-out forwards;
+}
+
+/* ---------------------------------------------------------
+   REST TIMER CARD
+--------------------------------------------------------- */
+.rest-timer-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.09);
+    margin-bottom: 12px;
+}
+
+.rest-timer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.rest-timer-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.rest-timer-time {
+    font-size: 22px;
+    font-weight: 700;
+    color: #007aff;
+    font-variant-numeric: tabular-nums;
+}
+
+.rest-timer-bar-wrap {
+    background: #f0f0f5;
+    border-radius: 6px;
+    height: 6px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.rest-timer-bar {
+    height: 100%;
+    background: #007aff;
+    border-radius: 6px;
+    transition: width 0.9s linear;
+}
+
+.rest-timer-opts {
+    display: flex;
+    gap: 6px;
+}
+
+.rest-opt-btn {
+    flex: 1;
+    background: #f0f0f5;
+    color: #333;
+    border: none;
+    border-radius: 8px;
+    padding: 7px 0;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 0;
+}
+
+.rest-opt-btn.active {
+    background: #007aff;
+    color: #fff;
+}
+
+.rest-opt-btn:active {
+    opacity: 0.7;
+}
+
+/* ---------------------------------------------------------
+   QUICK WEIGHT BUTTONS
+--------------------------------------------------------- */
+.weight-quick-btns {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.weight-quick-btn {
+    flex: 1;
+    background: #f0f0f5;
+    color: #333;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 0;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 0;
+}
+
+.weight-quick-btn:active {
+    background: #007aff;
+    color: #fff;
+    opacity: 1;
+}
+
+/* ---------------------------------------------------------
+   DRAG HANDLE
+--------------------------------------------------------- */
+.drag-handle {
+    color: #ccc;
+    font-size: 20px;
+    cursor: grab;
+    padding: 4px 8px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    line-height: 1;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+    color: #999;
+}
+
+.tracking-ex-item.dragging {
+    opacity: 0.35;
+}
+
+.tracking-ex-item.drag-over {
+    border-top: 2px solid #007aff;
 }
 

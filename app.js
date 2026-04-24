@@ -1,9 +1,21 @@
 ﻿// ---------------------------------------------------------
 // VERSION
 // ---------------------------------------------------------
-const APP_VERSION = "1.2.4";
+const APP_VERSION = "1.2.5";
 
 const CHANGELOG = [
+    {
+        version: "1.2.5",
+        date: "2026-04-24",
+        notes: [
+            "Pause-Timer startet automatisch nach jedem gespeicherten Satz (1 min / 2 min / 3 min / Aus)",
+            "Timer-Dauer während laufendem Countdown direkt umschaltbar",
+            "Geschätzte verbleibende Trainingszeit im Tracking-Header",
+            "Übungen per Drag & Drop neu sortierbar (⁝ Handle)",
+            "Schnell-Buttons für Gewicht (−5 / −2.5 / +2.5 / +5 kg)",
+            "Schnell-Buttons für Wiederholungen (−1 / +1 / +2 / +5)"
+        ]
+    },
     {
         version: "1.2.4",
         date: "2026-04-24",
@@ -95,6 +107,82 @@ const CHANGELOG = [
 ];
 
 // ---------------------------------------------------------
+// DASHBOARD CONFIG
+// ---------------------------------------------------------
+const DASHBOARD_SECTIONS = [
+    { key: "stats",         label: "Wochenstatistik" },
+    { key: "comparison",    label: "Wochenvergleich" },
+    { key: "volume",        label: "Sätze diese Woche" },
+    { key: "monthlyPRs",    label: "Bestleistungen diesen Monat" },
+    { key: "allTimePRs",    label: "Bestleistungen aller Zeiten" },
+    { key: "progression",   label: "Progression" },
+    { key: "weeklyHistory", label: "Wochenübersicht" },
+    { key: "calendar",      label: "Kalender" },
+];
+const DASHBOARD_DEFAULTS = {
+    stats: true, comparison: true, volume: true,
+    monthlyPRs: true, allTimePRs: true, progression: true,
+    weeklyHistory: true, calendar: true
+};
+let dashboardConfig = { ...DASHBOARD_DEFAULTS, ...JSON.parse(localStorage.getItem("dashboardConfig") || "{}") };
+let dashboardOrder  = (() => {
+    const saved = JSON.parse(localStorage.getItem("dashboardOrder") || "null");
+    const keys  = DASHBOARD_SECTIONS.map(s => s.key);
+    if (saved && saved.length === keys.length && keys.every(k => saved.includes(k))) return saved;
+    return keys;
+})();
+
+function saveDashboardConfig() {
+    localStorage.setItem("dashboardConfig", JSON.stringify(dashboardConfig));
+}
+
+function toggleDashboardSection(key, value) {
+    dashboardConfig[key] = value;
+    saveDashboardConfig();
+    renderDashboard();
+}
+
+function moveDashboardSection(key, dir) {
+    const idx = dashboardOrder.indexOf(key);
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= dashboardOrder.length) return;
+    [dashboardOrder[idx], dashboardOrder[newIdx]] = [dashboardOrder[newIdx], dashboardOrder[idx]];
+    localStorage.setItem("dashboardOrder", JSON.stringify(dashboardOrder));
+    renderDashboard();
+    openDashboardSettings();
+}
+
+function openDashboardSettings() {
+    const last = dashboardOrder.length - 1;
+    const rows = dashboardOrder.map((key, idx) => {
+        const section = DASHBOARD_SECTIONS.find(s => s.key === key);
+        if (!section) return "";
+        return `
+            <div class="dash-toggle-row">
+                <div class="dash-order-btns">
+                    <button class="dash-order-btn" onclick="moveDashboardSection('${key}',-1)" ${idx === 0    ? "disabled" : ""}>↑</button>
+                    <button class="dash-order-btn" onclick="moveDashboardSection('${key}', 1)" ${idx === last ? "disabled" : ""}>↓</button>
+                </div>
+                <span class="dash-toggle-label">${section.label}</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" ${dashboardConfig[key] !== false ? "checked" : ""}
+                        onchange="toggleDashboardSection('${key}', this.checked)">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        `;
+    }).join("");
+
+    openPopup(`
+        <p style="color:#888; font-size:13px; margin:0 0 16px;">Reihenfolge ändern oder Bereiche ein-/ausblenden.</p>
+        ${rows}
+        <div class="popup-footer" style="margin-top:16px;">
+            <button onclick="closePopup()" style="width:100%;">Fertig</button>
+        </div>
+    `, "Dashboard anpassen");
+}
+
+// ---------------------------------------------------------
 // DATA (with ID support)
 // ---------------------------------------------------------
 let categories = JSON.parse(localStorage.getItem("categories")) || ["Brust", "Rücken", "Beine"];
@@ -141,6 +229,123 @@ function showConfetti() {
         document.body.appendChild(el);
         setTimeout(() => el.remove(), 1100 + i * 55);
     }
+}
+
+// ---------------------------------------------------------
+// HAPTIC
+// ---------------------------------------------------------
+function vibrate(pattern) {
+    if (navigator.vibrate) navigator.vibrate(pattern);
+}
+
+// ---------------------------------------------------------
+// VOLUME PER CATEGORY
+// ---------------------------------------------------------
+function getVolumeByCategory() {
+    const vol = {};
+    getWorkoutsThisWeek().forEach(w => {
+        w.exercises.forEach(ex => {
+            const info = exercises.find(e => e.id === ex.id);
+            if (!info) return;
+            vol[info.category] = (vol[info.category] || 0) + ex.sets.length;
+        });
+    });
+    return vol;
+}
+
+// ---------------------------------------------------------
+// ALL-TIME PRs
+// ---------------------------------------------------------
+let allTimePRsCollapsed = true;
+
+function toggleAllTimePRs() {
+    allTimePRsCollapsed = !allTimePRsCollapsed;
+    const list  = document.getElementById("all-time-pr-list");
+    const arrow = document.getElementById("arrow-all-time-prs");
+    if (list)  list.style.display  = allTimePRsCollapsed ? "none" : "block";
+    if (arrow) arrow.textContent   = allTimePRsCollapsed ? "▸" : "▾";
+}
+
+function getAllTimePRs() {
+    const prMap = {};
+    workouts.forEach(w => {
+        w.exercises.forEach(ex => {
+            ex.sets.forEach(s => {
+                if (s.weight > 0 && (!prMap[ex.id] || s.weight > prMap[ex.id].weight)) {
+                    prMap[ex.id] = { weight: s.weight, reps: s.reps };
+                }
+            });
+        });
+    });
+    return Object.entries(prMap).map(([id, pr]) => {
+        const info = exercises.find(e => e.id === id);
+        return info ? { id, name: info.name, category: info.category, ...pr } : null;
+    }).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// ---------------------------------------------------------
+// WORKOUT CALENDAR
+// ---------------------------------------------------------
+let calendarYear  = new Date().getFullYear();
+let calendarMonth = new Date().getMonth();
+
+function calendarPrev() {
+    if (--calendarMonth < 0) { calendarMonth = 11; calendarYear--; }
+    renderDashboard();
+}
+
+function calendarNext() {
+    if (++calendarMonth > 11) { calendarMonth = 0; calendarYear++; }
+    renderDashboard();
+}
+
+function calendarDayClick(dateStr) {
+    showPage("history");
+    const idx = workouts.findIndex(w => w.date === dateStr);
+    if (idx >= 0) setTimeout(() => showWorkoutDetails(idx), 80);
+}
+
+function renderCalendar() { renderDashboard(); } // legacy alias
+
+function _renderCalendar_unused() {
+    const box = document.getElementById("calendarBox");
+    if (!box) return;
+
+    const MONTHS = ["Januar","Februar","März","April","Mai","Juni",
+                    "Juli","August","September","Oktober","November","Dezember"];
+    const year  = calendarYear;
+    const month = calendarMonth;
+
+    const dateMap = {};
+    workouts.forEach(w => { dateMap[w.date] = true; });
+
+    const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // Mon=0
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    let cells = "";
+    for (let i = 0; i < firstDow; i++) cells += `<div class="cal-cell empty"></div>`;
+    for (let d = 1; d <= daysInMonth; d++) {
+        const ds = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        const haW = dateMap[ds];
+        const isT = ds === todayStr;
+        cells += `<div class="cal-cell${haW ? " has-workout" : ""}${isT ? " today" : ""}"
+            ${haW ? `onclick="calendarDayClick('${ds}')"` : ""}>${d}</div>`;
+    }
+
+    box.innerHTML = `
+        <div class="cal-card">
+            <div class="cal-header">
+                <button class="cal-nav-btn" onclick="calendarPrev()">‹</button>
+                <span class="cal-title">${MONTHS[month]} ${year}</span>
+                <button class="cal-nav-btn" onclick="calendarNext()">›</button>
+            </div>
+            <div class="cal-weekdays">
+                <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
+            </div>
+            <div class="cal-grid">${cells}</div>
+        </div>
+    `;
 }
 
 function getLastSessionData(exId) {
@@ -346,8 +551,207 @@ function showPage(page) {
 }
 
 function renderDashboard() {
-    renderInsights();
-    renderHistoryGrouped();
+    const sections = buildDashboardSections();
+    document.getElementById("dashboardContent").innerHTML =
+        dashboardOrder.map(k => sections[k] || "").join("");
+    afterDashboardRender();
+}
+
+function afterDashboardRender() {
+    document.querySelectorAll("#dashboardContent .stat-num").forEach(el => {
+        animateCountUp(el, parseInt(el.dataset.target));
+    });
+    document.querySelectorAll("#dashboardContent canvas.mini-chart-canvas").forEach(canvas => {
+        if (canvas.dataset.values) drawMiniChart(canvas.id, JSON.parse(canvas.dataset.values));
+    });
+}
+
+function buildDashboardSections() {
+    const S = {};
+
+    if (workouts.length === 0) {
+        S.stats = `<p style="color:#888;">Noch keine Insights verfügbar.</p>`;
+        ["comparison","volume","monthlyPRs","allTimePRs","progression","weeklyHistory","calendar"]
+            .forEach(k => S[k] = "");
+        return S;
+    }
+
+    const thisWeekCount = getWorkoutsThisWeek().length;
+    const lastWeekCount = getWorkoutsLastWeek().length;
+    const comparison    = weeklyComparisonText(thisWeekCount, lastWeekCount);
+    const prs           = getPRsThisMonth();
+    const allTimePRs    = getAllTimePRs();
+    const progression   = getExerciseProgression();
+    const volByCat      = getVolumeByCategory();
+
+    // STATS
+    S.stats = dashboardConfig.stats ? `
+        <div class="insight-stats-grid">
+            <div class="insight-stat-card">
+                <div class="insight-stat-value">💪 <span class="stat-num" data-target="${thisWeekCount}">0</span></div>
+                <div class="insight-stat-label">Diese Woche</div>
+            </div>
+            <div class="insight-stat-card">
+                <div class="insight-stat-value">📅 <span class="stat-num" data-target="${lastWeekCount}">0</span></div>
+                <div class="insight-stat-label">Letzte Woche</div>
+            </div>
+        </div>` : "";
+
+    // COMPARISON
+    S.comparison = dashboardConfig.comparison
+        ? `<div class="insight-compare-card">${comparison}</div>` : "";
+
+    // VOLUME
+    if (dashboardConfig.volume && Object.keys(volByCat).length > 0) {
+        const maxSets = Math.max(...Object.values(volByCat));
+        const rows = Object.entries(volByCat).sort((a, b) => b[1] - a[1]).map(([cat, sets]) => `
+            <div class="volume-row">
+                <div class="volume-label">${cat}</div>
+                <div class="volume-bar-wrap"><div class="volume-bar" style="width:${Math.round(sets/maxSets*100)}%"></div></div>
+                <div class="volume-count">${sets}</div>
+            </div>`).join("");
+        S.volume = `<div class="pr-section" style="margin-bottom:14px;">
+            <h3 style="margin:0 0 12px;font-size:16px;color:#333;cursor:default;">📊 Sätze diese Woche</h3>${rows}</div>`;
+    } else { S.volume = ""; }
+
+    // MONTHLY PRs
+    if (dashboardConfig.monthlyPRs) {
+        if (prs.length > 0) {
+            const visiblePRs = prs.slice(0, 5), hiddenPRs = prs.slice(5), hasMore = hiddenPRs.length > 0;
+            S.monthlyPRs = `
+                <div class="pr-section">
+                    <div class="pr-header" onclick="togglePRSection()">
+                        <h3>🏆 Bestleistungen diesen Monat</h3>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="pr-count-badge">${prs.length}</span>
+                            <span id="arrow-pr-section">${prSectionExpanded ? "▾" : "▸"}</span>
+                        </div>
+                    </div>
+                    <div id="pr-list" style="display:${prSectionExpanded ? "block" : "none"};">
+                        ${visiblePRs.map(pr => `
+                            <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
+                                <div>${pr.name}</div>
+                                <div><strong>${pr.newMax} kg</strong> <span class="pr-delta">↑ +${pr.delta} kg</span></div>
+                            </div>`).join("")}
+                        ${hasMore ? `
+                            <div id="pr-hidden" style="display:${prMoreExpanded ? "block" : "none"};">
+                                ${hiddenPRs.map(pr => `
+                                    <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
+                                        <div>${pr.name}</div>
+                                        <div><strong>${pr.newMax} kg</strong> <span class="pr-delta">↑ +${pr.delta} kg</span></div>
+                                    </div>`).join("")}
+                            </div>
+                            <button id="pr-more-btn" data-count="${hiddenPRs.length}" onclick="togglePRMore()"
+                                    style="width:100%;margin-top:8px;font-size:13px;background:#f0f0f5;color:#333;">
+                                ${prMoreExpanded ? "Weniger anzeigen ▲" : `Mehr anzeigen (${hiddenPRs.length}) ▼`}
+                            </button>` : ""}
+                    </div>
+                </div>`;
+        } else {
+            S.monthlyPRs = `<p style="color:#888;margin:0 0 16px;">Noch keine neuen Bestleistungen diesen Monat.</p>`;
+        }
+    } else { S.monthlyPRs = ""; }
+
+    // ALL-TIME PRs
+    S.allTimePRs = dashboardConfig.allTimePRs && allTimePRs.length > 0 ? `
+        <div class="pr-section">
+            <div class="pr-header" onclick="toggleAllTimePRs()">
+                <h3>🥇 Bestleistungen aller Zeiten</h3>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="pr-count-badge">${allTimePRs.length}</span>
+                    <span id="arrow-all-time-prs">${allTimePRsCollapsed ? "▸" : "▾"}</span>
+                </div>
+            </div>
+            <div id="all-time-pr-list" style="display:${allTimePRsCollapsed ? "none" : "block"};">
+                ${allTimePRs.map(pr => `
+                    <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
+                        <div>${pr.name}<br><small style="color:#aaa;font-size:12px;">${pr.category}</small></div>
+                        <div><strong>${pr.weight} kg</strong> <span style="color:#888;font-size:13px;">× ${pr.reps}</span></div>
+                    </div>`).join("")}
+            </div>
+        </div>` : "";
+
+    // PROGRESSION
+    S.progression = dashboardConfig.progression ? `
+        <div class="progression-card">
+            <h3>Progression</h3>
+            ${progression.length === 0
+                ? `<p style="color:#888;margin:0;">Noch keine Progression messbar.</p>`
+                : progression.map((p, idx) => {
+                    if (progressionCollapsed[p.id] === undefined) progressionCollapsed[p.id] = false;
+                    const collapsed     = progressionCollapsed[p.id];
+                    const prBadge       = p.isPR    ? `<span class="badge-pr">🏆 PR</span>` : "";
+                    const plateauBadge  = p.plateau ? `<span class="badge-plateau">⚠️ Plateau</span>` : "";
+                    return `
+                        <h4 onclick="toggleProgression('${p.id}')" class="progression-header">
+                            <span>${p.name} ${prBadge}${plateauBadge}</span>
+                            <span class="progression-header-controls">
+                                <button onclick="showExerciseDetail('${p.id}');event.stopPropagation();"
+                                        style="font-size:12px;padding:3px 8px;margin:0;">Details</button>
+                                <span id="arrow-prog_${p.id}">${collapsed ? "▸" : "▾"}</span>
+                            </span>
+                        </h4>
+                        <div id="prog_${p.id}" style="display:${collapsed ? "none" : "block"};font-size:13px;color:#555;padding:8px 0 4px;">
+                            Volumen letzte Steigerung: ${p.lastIncrease > 0 ? "+" : ""}${Math.round(p.lastIncrease)} kg·Wdh<br>
+                            Bestes Gewicht: ${p.lastBest} kg${p.allTimeBest > p.lastBest ? ` (Rekord: ${p.allTimeBest} kg)` : ""}<br>
+                            (${p.count} Workouts)
+                            <canvas id="chart_${idx}" height="75" class="mini-chart-canvas"
+                                data-values='${JSON.stringify(p.chartValues)}'></canvas>
+                        </div>`;
+                }).join("")}
+        </div>` : "";
+
+    // WEEKLY HISTORY
+    if (dashboardConfig.weeklyHistory) {
+        const groups = groupWorkoutsByWeek();
+        const keys = Object.keys(groups).sort().reverse();
+        S.weeklyHistory = `
+            <h2 style="font-size:17px;margin:20px 0 10px;">Wochenübersicht</h2>
+            ${keys.map(key => `
+                <div class="week-box">
+                    <h3 onclick="toggleCollapse('week_${key}')">${key} <span id="arrow-week_${key}">▾</span></h3>
+                    <div id="week_${key}">
+                        ${groups[key].map(w => `
+                            <div class="history-entry">
+                                <strong>${w.plan}</strong> – ${w.date}${w.duration ? ` · ${w.duration} min` : ""}
+                            </div>`).join("")}
+                    </div>
+                </div>`).join("")}`;
+    } else { S.weeklyHistory = ""; }
+
+    // CALENDAR
+    if (dashboardConfig.calendar) {
+        const MONTHS = ["Januar","Februar","März","April","Mai","Juni",
+                        "Juli","August","September","Oktober","November","Dezember"];
+        const year = calendarYear, month = calendarMonth;
+        const dateMap = {};
+        workouts.forEach(w => { dateMap[w.date] = true; });
+        const firstDow   = (new Date(year, month, 1).getDay() + 6) % 7;
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const todayStr   = new Date().toISOString().slice(0, 10);
+        let cells = "";
+        for (let i = 0; i < firstDow; i++) cells += `<div class="cal-cell empty"></div>`;
+        for (let d = 1; d <= daysInMonth; d++) {
+            const ds = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+            const haW = dateMap[ds], isT = ds === todayStr;
+            cells += `<div class="cal-cell${haW?" has-workout":""}${isT?" today":""}"
+                ${haW ? `onclick="calendarDayClick('${ds}')"` : ""}>${d}</div>`;
+        }
+        S.calendar = `
+            <div class="cal-card">
+                <div class="cal-header">
+                    <button class="cal-nav-btn" onclick="calendarPrev()">‹</button>
+                    <span class="cal-title">${MONTHS[month]} ${year}</span>
+                    <button class="cal-nav-btn" onclick="calendarNext()">›</button>
+                </div>
+                <div class="cal-weekdays">
+                    <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
+                </div>
+                <div class="cal-grid">${cells}</div>
+            </div>`;
+    } else { S.calendar = ""; }
+
+    return S;
 }
 
 function renderWeeklyHistory() {
@@ -745,6 +1149,12 @@ let timerInterval = null;
 let timerSeconds = 0;
 let timerStart = null;
 
+let restTimerDuration = parseInt(localStorage.getItem("restTimerDuration") || "60");
+let restTimerRemaining = 0;
+let restTimerInterval = null;
+let setTimestamps = [];
+let dragState = null;
+
 // ---------------------------------------------------------
 // TIME FORMAT
 // ---------------------------------------------------------
@@ -774,22 +1184,198 @@ function toggleTimer() {
 }
 
 // ---------------------------------------------------------
-// MOVE EXERCISES
+// REST TIMER
 // ---------------------------------------------------------
-function moveExerciseUp(index) {
-    if (index > 0) {
-        [currentTracking.exercises[index], currentTracking.exercises[index - 1]] =
-            [currentTracking.exercises[index - 1], currentTracking.exercises[index]];
-        renderTracking();
+function startRestTimer() {
+    if (restTimerDuration === 0) return;
+    stopRestTimer();
+    restTimerRemaining = restTimerDuration;
+    const countdown = document.getElementById("restCountdown");
+    if (countdown) countdown.style.display = "";
+    updateRestTimerUI();
+    restTimerInterval = setInterval(() => {
+        restTimerRemaining--;
+        if (restTimerRemaining <= 0) {
+            restTimerRemaining = 0;
+            stopRestTimer();
+            vibrate([100, 50, 100]);
+            const cd = document.getElementById("restCountdown");
+            if (cd) cd.style.display = "none";
+            return;
+        }
+        updateRestTimerUI();
+    }, 1000);
+}
+
+function stopRestTimer() {
+    if (restTimerInterval) {
+        clearInterval(restTimerInterval);
+        restTimerInterval = null;
     }
 }
 
-function moveExerciseDown(index) {
-    if (index < currentTracking.exercises.length - 1) {
-        [currentTracking.exercises[index], currentTracking.exercises[index + 1]] =
-            [currentTracking.exercises[index + 1], currentTracking.exercises[index]];
-        renderTracking();
+function skipRestTimer() {
+    stopRestTimer();
+    restTimerRemaining = 0;
+    const countdown = document.getElementById("restCountdown");
+    if (countdown) countdown.style.display = "none";
+}
+
+function setRestDuration(s) {
+    const wasRunning = restTimerInterval !== null;
+    restTimerDuration = s;
+    localStorage.setItem("restTimerDuration", s);
+    stopRestTimer();
+    restTimerRemaining = 0;
+    const optsEl = document.getElementById("restTimerOpts");
+    if (optsEl) optsEl.innerHTML = restTimerOptsHTML();
+    if (s === 0 || !wasRunning) {
+        const countdown = document.getElementById("restCountdown");
+        if (countdown) countdown.style.display = "none";
+    } else {
+        startRestTimer();
     }
+}
+
+function restTimerOptsHTML() {
+    return [["Aus", 0], ["1 min", 60], ["2 min", 120], ["3 min", 180]]
+        .map(([label, val]) =>
+            `<button class="rest-opt-btn${restTimerDuration === val ? " active" : ""}" onclick="setRestDuration(${val})">${label}</button>`)
+        .join("");
+}
+
+function updateRestTimerUI() {
+    const timeEl = document.getElementById("restTimerTime");
+    if (timeEl) timeEl.textContent = formatTime(restTimerRemaining);
+    const bar = document.getElementById("restTimerBar");
+    if (bar && restTimerDuration > 0) {
+        bar.style.width = `${(restTimerRemaining / restTimerDuration) * 100}%`;
+    }
+}
+
+function initRestTimerUI() {
+    const card = document.getElementById("restTimerCard");
+    if (!card) return;
+    card.style.display = "none";
+    card.innerHTML = `
+        <div class="rest-timer-card">
+            <div id="restCountdown" style="display:none;">
+                <div class="rest-timer-header">
+                    <span class="rest-timer-label">⏸ Pause</span>
+                    <span class="rest-timer-time" id="restTimerTime">0:00</span>
+                    <button onclick="skipRestTimer()" style="background:none;color:#888;font-size:13px;padding:4px 8px;margin:0;font-weight:600;">Überspringen</button>
+                </div>
+                <div class="rest-timer-bar-wrap" style="margin-bottom:10px;">
+                    <div class="rest-timer-bar" id="restTimerBar" style="width:100%;"></div>
+                </div>
+            </div>
+            <div class="rest-timer-opts" id="restTimerOpts">${restTimerOptsHTML()}</div>
+        </div>
+    `;
+}
+
+function showRestTimerCard() {
+    const card = document.getElementById("restTimerCard");
+    if (card) card.style.display = "";
+}
+
+// ---------------------------------------------------------
+// QUICK WEIGHT ADJUST
+// ---------------------------------------------------------
+function adjustWeight(delta) {
+    const el = document.getElementById("trackWeight");
+    if (!el) return;
+    const current = parseFloat(el.value) || 0;
+    const newVal = Math.max(0, current + delta);
+    el.value = newVal % 1 === 0 ? newVal : newVal.toFixed(1);
+}
+
+function adjustReps(delta) {
+    const el = document.getElementById("trackReps");
+    if (!el) return;
+    el.value = Math.max(0, (parseInt(el.value) || 0) + delta);
+}
+
+// ---------------------------------------------------------
+// ESTIMATED TIME REMAINING
+// ---------------------------------------------------------
+function getEstimatedTimeRemaining() {
+    if (!currentTracking || setTimestamps.length < 3) return null;
+    const workoutStart = new Date(currentTracking.startTime).getTime();
+    const elapsed = Date.now() - workoutStart;
+    const setsDone = currentTracking.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+    if (setsDone < 3) return null;
+    const avgTimePerSet = elapsed / setsDone;
+    const setsPerEx = setsDone / Math.max(1, currentExerciseIndex + 1);
+    const remainingExercises = currentTracking.exercises.length - currentExerciseIndex - 1;
+    const currentExSets = currentTracking.exercises[currentExerciseIndex]?.sets.length || 0;
+    const remainingSetsInCurrent = Math.max(0, Math.round(setsPerEx) - currentExSets);
+    const remainingSets = remainingExercises * Math.round(setsPerEx) + remainingSetsInCurrent;
+    if (remainingSets <= 0) return null;
+    return Math.round((remainingSets * avgTimePerSet) / 1000);
+}
+
+// ---------------------------------------------------------
+// DRAG TO REORDER EXERCISES
+// ---------------------------------------------------------
+function addExerciseDragListeners() {
+    const items = document.querySelectorAll(".tracking-ex-item[data-idx]");
+    items.forEach(item => {
+        const handle = item.querySelector(".drag-handle");
+        if (!handle) return;
+
+        handle.addEventListener("touchstart", e => {
+            dragState = {
+                fromIdx: parseInt(item.dataset.idx),
+                currentIdx: parseInt(item.dataset.idx),
+                startY: e.touches[0].clientY
+            };
+            item.classList.add("dragging");
+            e.preventDefault();
+        }, { passive: false });
+
+        handle.addEventListener("touchmove", e => {
+            if (!dragState) return;
+            const y = e.touches[0].clientY;
+            document.querySelectorAll(".tracking-ex-item[data-idx]").forEach(other => {
+                other.classList.remove("drag-over");
+                const rect = other.getBoundingClientRect();
+                if (y >= rect.top && y <= rect.bottom) {
+                    dragState.currentIdx = parseInt(other.dataset.idx);
+                }
+            });
+            if (dragState.currentIdx !== dragState.fromIdx) {
+                const target = document.querySelector(`.tracking-ex-item[data-idx="${dragState.currentIdx}"]`);
+                if (target) target.classList.add("drag-over");
+            }
+            e.preventDefault();
+        }, { passive: false });
+
+        handle.addEventListener("touchend", () => {
+            if (!dragState) return;
+            document.querySelectorAll(".tracking-ex-item[data-idx]").forEach(el => {
+                el.classList.remove("dragging", "drag-over");
+            });
+            if (dragState.currentIdx !== dragState.fromIdx) {
+                commitDragReorder(dragState.fromIdx, dragState.currentIdx);
+            }
+            dragState = null;
+        });
+    });
+}
+
+function commitDragReorder(fromIdx, toIdx) {
+    const arr = currentTracking.exercises;
+    const moved = arr.splice(fromIdx, 1)[0];
+    arr.splice(toIdx, 0, moved);
+    if (fromIdx === currentExerciseIndex) {
+        currentExerciseIndex = toIdx;
+    } else if (fromIdx < currentExerciseIndex && toIdx >= currentExerciseIndex) {
+        currentExerciseIndex--;
+    } else if (fromIdx > currentExerciseIndex && toIdx <= currentExerciseIndex) {
+        currentExerciseIndex++;
+    }
+    renderTracking();
 }
 
 // ---------------------------------------------------------
@@ -809,6 +1395,10 @@ function startFreeTraining() {
     timerStart = null;
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = null;
+    setTimestamps = [];
+    stopRestTimer();
+    initRestTimerUI();
+    showRestTimerCard();
 
     renderTracking();
 }
@@ -840,6 +1430,10 @@ function startTracking() {
     timerStart = null;
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = null;
+    setTimestamps = [];
+    stopRestTimer();
+    initRestTimerUI();
+    showRestTimerCard();
 
     renderTracking();
 }
@@ -1103,20 +1697,25 @@ function renderTracking() {
         const info = exercises.find(e => e.id === item.id);
         const isCurrent = idx === currentExerciseIndex;
         return `
-            <div class="tracking-ex-item${isCurrent ? " current" : idx < currentExerciseIndex ? " done" : ""}">
+            <div class="tracking-ex-item${isCurrent ? " current" : idx < currentExerciseIndex ? " done" : ""}" data-idx="${idx}">
                 <span>${info ? info.name : "Unbekannt"}</span>
-                <div class="tracking-ex-item-actions">
-                    <button class="ex-icon-btn" onclick="moveExerciseUp(${idx})">↑</button>
-                    <button class="ex-icon-btn" onclick="moveExerciseDown(${idx})">↓</button>
-                </div>
+                <span class="drag-handle">≡</span>
             </div>
         `;
     }).join("");
 
+    const eta = getEstimatedTimeRemaining();
+    const etaHtml = eta !== null
+        ? `<div style="font-size:11px; color:#aaa; margin-top:3px;">~${Math.ceil(eta / 60)} min übrig</div>`
+        : "";
+
     area.innerHTML = `
         <div class="tracking-header">
             <div class="tracking-ex-name">${exInfo ? exInfo.name : "Unbekannt"}</div>
-            <div class="tracking-progress">${done + 1} / ${total}</div>
+            <div style="text-align:right;">
+                <div class="tracking-progress">${done + 1} / ${total}</div>
+                ${etaHtml}
+            </div>
         </div>
 
         ${lastSessionHtml}
@@ -1126,10 +1725,22 @@ function renderTracking() {
                 <div class="tracking-input-group">
                     <label>Gewicht (kg)</label>
                     <input id="trackWeight" type="number" value="${ex.sets.at(-1)?.weight ?? ""}">
+                    <div class="weight-quick-btns">
+                        <button class="weight-quick-btn" onclick="adjustWeight(-5)">−5</button>
+                        <button class="weight-quick-btn" onclick="adjustWeight(-2.5)">−2.5</button>
+                        <button class="weight-quick-btn" onclick="adjustWeight(2.5)">+2.5</button>
+                        <button class="weight-quick-btn" onclick="adjustWeight(5)">+5</button>
+                    </div>
                 </div>
                 <div class="tracking-input-group">
                     <label>Wiederholungen</label>
                     <input id="trackReps" type="number" value="${ex.sets.at(-1)?.reps ?? ""}">
+                    <div class="weight-quick-btns">
+                        <button class="weight-quick-btn" onclick="adjustReps(-1)">−1</button>
+                        <button class="weight-quick-btn" onclick="adjustReps(1)">+1</button>
+                        <button class="weight-quick-btn" onclick="adjustReps(2)">+2</button>
+                        <button class="weight-quick-btn" onclick="adjustReps(5)">+5</button>
+                    </div>
                 </div>
             </div>
             <button onclick="saveSet()" style="width:100%; margin:10px 0 0;">Satz speichern</button>
@@ -1142,17 +1753,13 @@ function renderTracking() {
             <button onclick="finishWorkoutPrompt()" style="flex:1; margin:0; background:#ff3b30;">Workout Beenden 🛑</button>
         </div>
 
-        <div class="tracking-timer" onclick="toggleTimer()">
-            <span>⏱️</span>
-            <span id="timerDisplay">${formatTime(timerSeconds)}</span>
-        </div>
-
         <div class="tracking-exercise-list">${exerciseListHtml}</div>
 
         ${addExerciseBlock}
     `;
 
     addSetChipSwipeListeners();
+    addExerciseDragListeners();
 }
 
 // ---------------------------------------------------------
@@ -1168,7 +1775,10 @@ function saveSet() {
     const prevPR = getExercisePR(exId);
 
     currentTracking.exercises[currentExerciseIndex].sets.push({ weight, reps });
+    setTimestamps.push(Date.now());
     renderTracking();
+    vibrate(25);
+    startRestTimer();
 
     const chips = document.querySelectorAll(".set-chip");
     const lastChip = chips[chips.length - 1];
@@ -1176,6 +1786,7 @@ function saveSet() {
 
     if (prevPR > 0 && weight > prevPR) {
         showPRToast(weight);
+        vibrate([50, 30, 50]);
     }
 }
 
@@ -1187,6 +1798,9 @@ function nextExercise() {
     renderTracking();
     if (currentExerciseIndex >= currentTracking.exercises.length) {
         showConfetti();
+        vibrate([50, 50, 100]);
+    } else {
+        vibrate(40);
     }
 }
 
@@ -1230,6 +1844,9 @@ function finishWorkout() {
     timerInterval = null;
     timerSeconds = 0;
     timerStart = null;
+    setTimestamps = [];
+    stopRestTimer();
+    initRestTimerUI();
 
     const startEl = document.getElementById("trackingStartTime");
     if (startEl) startEl.innerText = "";
@@ -1675,14 +2292,23 @@ function drawDetailChart(canvasId, data) {
 // DASHBOARD – INSIGHTS (with collapsible progression)
 // ---------------------------------------------------------
 let progressionCollapsed = {};
-let prSectionExpanded = false;
+let prSectionExpanded = true;
+let prMoreExpanded = false;
 
 function togglePRSection() {
     prSectionExpanded = !prSectionExpanded;
-    const hidden = document.getElementById("pr-hidden");
+    const list = document.getElementById("pr-list");
     const arrow = document.getElementById("arrow-pr-section");
-    if (hidden) hidden.style.display = prSectionExpanded ? "block" : "none";
+    if (list) list.style.display = prSectionExpanded ? "block" : "none";
     if (arrow) arrow.textContent = prSectionExpanded ? "▾" : "▸";
+}
+
+function togglePRMore() {
+    prMoreExpanded = !prMoreExpanded;
+    const hidden = document.getElementById("pr-hidden");
+    const btn = document.getElementById("pr-more-btn");
+    if (hidden) hidden.style.display = prMoreExpanded ? "block" : "none";
+    if (btn) btn.textContent = prMoreExpanded ? "Weniger anzeigen ▲" : `Mehr anzeigen (${btn.dataset.count}) ▼`;
 }
 
 function toggleProgression(id) {
@@ -1700,7 +2326,9 @@ function toggleProgression(id) {
     }
 }
 
-function renderInsights() {
+function renderInsights() { renderDashboard(); } // legacy alias
+
+function _renderInsights_unused() {
     const box = document.getElementById("insightsBox");
 
     if (workouts.length === 0) {
@@ -1713,6 +2341,8 @@ function renderInsights() {
     const comparison = weeklyComparisonText(thisWeekCount, lastWeekCount);
     const progression = getExerciseProgression();
     const prs = getPRsThisMonth();
+    const volByCat = getVolumeByCategory();
+    const allTimePRs = getAllTimePRs();
 
     let prSectionHtml = "";
     if (prs.length > 0) {
@@ -1723,28 +2353,34 @@ function renderInsights() {
         prSectionHtml = `
             <div class="pr-section">
                 <div class="pr-header" onclick="togglePRSection()">
-                    <h3>🏆 Neue Bestleistungen diesen Monat</h3>
-                    <span id="arrow-pr-section">${hasMore ? "▾" : ""}</span>
+                    <h3>🏆 Bestleistungen diesen Monat</h3>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="pr-count-badge">${prs.length}</span>
+                        <span id="arrow-pr-section">${prSectionExpanded ? "▾" : "▸"}</span>
+                    </div>
                 </div>
-                <div id="pr-visible">
+                <div id="pr-list" style="display:${prSectionExpanded ? "block" : "none"};">
                     ${visiblePRs.map(pr => `
                         <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
                             <div>${pr.name}</div>
                             <div><strong>${pr.newMax} kg</strong> <span class="pr-delta">↑ +${pr.delta} kg</span></div>
                         </div>
                     `).join("")}
+                    ${hasMore ? `
+                        <div id="pr-hidden" style="display:${prMoreExpanded ? "block" : "none"};">
+                            ${hiddenPRs.map(pr => `
+                                <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
+                                    <div>${pr.name}</div>
+                                    <div><strong>${pr.newMax} kg</strong> <span class="pr-delta">↑ +${pr.delta} kg</span></div>
+                                </div>
+                            `).join("")}
+                        </div>
+                        <button id="pr-more-btn" data-count="${hiddenPRs.length}" onclick="togglePRMore()"
+                                style="width:100%; margin-top:8px; font-size:13px; background:#f0f0f5; color:#333;">
+                            ${prMoreExpanded ? "Weniger anzeigen ▲" : `Mehr anzeigen (${hiddenPRs.length}) ▼`}
+                        </button>
+                    ` : ""}
                 </div>
-                ${hasMore ? `
-                    <div id="pr-hidden" style="display:none;">
-                        ${hiddenPRs.map(pr => `
-                            <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
-                                <div>${pr.name}</div>
-                                <div><strong>${pr.newMax} kg</strong> <span class="pr-delta">↑ +${pr.delta} kg</span></div>
-                            </div>
-                        `).join("")}
-                    </div>
-                    <button onclick="togglePRSection()" style="width:100%; margin-top:8px; font-size:13px;">Mehr anzeigen (${hiddenPRs.length})</button>
-                ` : ""}
             </div>
         `;
     } else {
@@ -1752,6 +2388,7 @@ function renderInsights() {
     }
 
     box.innerHTML = `
+        ${dashboardConfig.stats ? `
         <div class="insight-stats-grid">
             <div class="insight-stat-card">
                 <div class="insight-stat-value">💪 <span class="stat-num" data-target="${thisWeekCount}">0</span></div>
@@ -1761,13 +2398,52 @@ function renderInsights() {
                 <div class="insight-stat-value">📅 <span class="stat-num" data-target="${lastWeekCount}">0</span></div>
                 <div class="insight-stat-label">Letzte Woche</div>
             </div>
+        </div>` : ""}
+
+        ${dashboardConfig.comparison ? `<div class="insight-compare-card">${comparison}</div>` : ""}
+
+        ${dashboardConfig.volume && Object.keys(volByCat).length > 0 ? (() => {
+            const maxSets = Math.max(...Object.values(volByCat));
+            const rows = Object.entries(volByCat)
+                .sort((a, b) => b[1] - a[1])
+                .map(([cat, sets]) => `
+                    <div class="volume-row">
+                        <div class="volume-label">${cat}</div>
+                        <div class="volume-bar-wrap">
+                            <div class="volume-bar" style="width:${Math.round(sets / maxSets * 100)}%"></div>
+                        </div>
+                        <div class="volume-count">${sets}</div>
+                    </div>
+                `).join("");
+            return `<div class="pr-section" style="margin-bottom:14px;">
+                <h3 style="margin:0 0 12px; font-size:16px; color:#333; cursor:default;">📊 Sätze diese Woche</h3>
+                ${rows}
+            </div>`;
+        })() : ""}
+
+        ${dashboardConfig.monthlyPRs ? prSectionHtml : ""}
+
+        ${dashboardConfig.allTimePRs && allTimePRs.length > 0 ? `
+        <div class="pr-section">
+            <div class="pr-header" onclick="toggleAllTimePRs()">
+                <h3>🥇 Bestleistungen aller Zeiten</h3>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="pr-count-badge">${allTimePRs.length}</span>
+                    <span id="arrow-all-time-prs">${allTimePRsCollapsed ? "▸" : "▾"}</span>
+                </div>
+            </div>
+            <div id="all-time-pr-list" style="display:${allTimePRsCollapsed ? "none" : "block"};">
+                ${allTimePRs.map(pr => `
+                    <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
+                        <div>${pr.name}<br><small style="color:#aaa; font-size:12px;">${pr.category}</small></div>
+                        <div><strong>${pr.weight} kg</strong> <span style="color:#888; font-size:13px;">× ${pr.reps}</span></div>
+                    </div>
+                `).join("")}
+            </div>
         </div>
+        ` : ""}
 
-        <div class="insight-compare-card">${comparison}</div>
-
-        ${prSectionHtml}
-
-        <div class="progression-card">
+        ${dashboardConfig.progression ? `<div class="progression-card">
             <h3>Progression</h3>
             ${
                 progression.length === 0
@@ -1799,7 +2475,7 @@ function renderInsights() {
                     `;
                 }).join("")
             }
-        </div>
+        </div>` : ""}
     `;
 
     progression.forEach((p, idx) => {
@@ -1816,7 +2492,9 @@ function renderInsights() {
 // ---------------------------------------------------------
 // DASHBOARD – WEEKLY HISTORY
 // ---------------------------------------------------------
-function renderHistoryGrouped() {
+function renderHistoryGrouped() { renderDashboard(); } // legacy alias
+
+function _renderHistoryGrouped_unused() {
     const box = document.getElementById("historyBox");
 
     if (workouts.length === 0) {
@@ -1893,36 +2571,36 @@ function openChangelog() {
     `).join("");
 
     openPopup(`
-        <h2 style="margin-bottom:16px;">📋 Patch Notes</h2>
-        ${entriesHtml}
-        <button onclick="closePopup()" style="width:100%; margin-top:8px;">Schließen</button>
-    `);
+        <div class="popup-content">${entriesHtml}</div>
+        <div class="popup-footer">
+            <button onclick="closePopup()" style="width:100%;">Schließen</button>
+        </div>
+    `, "📋 Patch Notes");
 }
 
 function openSettingsMenu() {
-    const html = `
-        <h2>Einstellungen – v${APP_VERSION}</h2>
+    openPopup(`
+        <div class="popup-content">
+            <h3 style="margin:0 0 12px;">📦 Export / Import</h3>
+            <button onclick="exportAll()">📤 Alles exportieren (JSON)</button>
+            <input type="file" accept="application/json" onchange="handleImportFile(event)">
 
-        <h3>📦 Export / Import</h3>
-        <button onclick="exportAll()">📤 Alles exportieren (JSON)</button>
-        <input type="file" accept="application/json" onchange="handleImportFile(event)">
+            <hr>
 
-        <hr>
+            <h3 style="margin:12px 0;">📊 CSV-Export</h3>
+            <button onclick="exportCSVWorkouts()">Workouts.csv</button>
+            <button onclick="exportCSVExercises()">Exercises.csv</button>
+            <button onclick="exportCSVPlans()">Plans.csv</button>
 
-        <h3>📊 CSV-Export</h3>
-        <button onclick="exportCSVWorkouts()">Workouts.csv</button>
-        <button onclick="exportCSVExercises()">Exercises.csv</button>
-        <button onclick="exportCSVPlans()">Plans.csv</button>
+            <hr>
 
-        <hr>
-
-        <h3>⚙️ System</h3>
-        <p>App-Version: ${APP_VERSION}</p>
-
-        <button onclick="closePopup()" style="margin-top:20px;">Schließen</button>
-    `;
-
-    openPopup(html);
+            <h3 style="margin:12px 0;">⚙️ System</h3>
+            <p style="margin:0;">App-Version: ${APP_VERSION}</p>
+        </div>
+        <div class="popup-footer">
+            <button onclick="closePopup()" style="width:100%;">Schließen</button>
+        </div>
+    `, `⚙️ Einstellungen – v${APP_VERSION}`);
 }
 
 
@@ -2384,5 +3062,6 @@ function renderAll() {
 // INITIALIZE
 // ---------------------------------------------------------
 document.getElementById("appVersionText").textContent = "Version " + APP_VERSION;
+initRestTimerUI();
 renderAll();
 showPage("dashboard");
