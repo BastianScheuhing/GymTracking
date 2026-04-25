@@ -1368,9 +1368,13 @@ function commitDragReorder(fromIdx, toIdx) {
     const arr = currentTracking.exercises;
     const moved = arr.splice(fromIdx, 1)[0];
     arr.splice(toIdx, 0, moved);
-    // Only update currentExerciseIndex if the current exercise itself was moved
+    // Adjust currentExerciseIndex to track the same exercise
     if (fromIdx === currentExerciseIndex) {
         currentExerciseIndex = toIdx;
+    } else if (fromIdx < currentExerciseIndex && toIdx >= currentExerciseIndex) {
+        currentExerciseIndex--;
+    } else if (fromIdx > currentExerciseIndex && toIdx <= currentExerciseIndex) {
+        currentExerciseIndex++;
     }
     renderTracking();
 }
