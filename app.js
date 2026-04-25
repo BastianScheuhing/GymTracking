@@ -1,9 +1,16 @@
 ﻿// ---------------------------------------------------------
 // VERSION
 // ---------------------------------------------------------
-const APP_VERSION = "1.2.7";
+const APP_VERSION = "1.2.8";
 
 const CHANGELOG = [
+    {
+        version: "1.2.8",
+        date: "2026-04-25",
+        notes: [
+            "Workout aus Historie als Vorlage für neues Training verwenden (▶️ Button)"
+        ]
+    },
     {
         version: "1.2.7",
         date: "2026-04-25",
@@ -1002,6 +1009,7 @@ function renderHistory() {
                     <div class="history-card-meta">${w.date}${w.duration ? ` · ${w.duration} min` : ""}</div>
                 </div>
                 <div class="history-card-actions">
+                    <button class="ex-icon-btn" title="Als Vorlage verwenden" onclick="startFromHistory(${originalIndex})">▶️</button>
                     <button class="ex-icon-btn" onclick="openWorkoutEditor(${originalIndex})">✏️</button>
                     <button class="ex-icon-btn" onclick="deleteWorkout(${originalIndex})">🗑️</button>
                 </div>
@@ -1050,6 +1058,38 @@ function deleteWorkout(i) {
     save();
     renderHistory();
     document.getElementById("overviewDetails").innerHTML = "";
+}
+
+function startFromHistory(i) {
+    const w = workouts[i];
+    const validExercises = w.exercises
+        .filter(ex => exercises.find(e => e.id === ex.id))
+        .map(ex => ({ id: ex.id, sets: [] }));
+
+    if (validExercises.length === 0) {
+        alert("Keine gültigen Übungen in diesem Workout gefunden.");
+        return;
+    }
+
+    currentTracking = {
+        plan: w.plan,
+        date: new Date().toISOString().split("T")[0],
+        note: "",
+        startTime: new Date(),
+        exercises: validExercises
+    };
+
+    currentExerciseIndex = 0;
+    timerSeconds = 0;
+    timerStart = null;
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = null;
+    setTimestamps = [];
+    stopRestTimer();
+    initRestTimerUI();
+    showRestTimerCard();
+
+    showPage("tracking");
 }
 
 // ---------------------------------------------------------
