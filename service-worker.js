@@ -1,4 +1,4 @@
-const CACHE = "gym-tracker-cache-v2";
+const CACHE = "gym-tracker-cache-v4";
 
 self.addEventListener("install", e => {
     e.waitUntil(
@@ -27,5 +27,15 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
     e.respondWith(
         caches.match(e.request).then(response => response || fetch(e.request))
+    );
+});
+
+self.addEventListener("notificationclick", e => {
+    e.notification.close();
+    e.waitUntil(
+        clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+            if (list.length) return list[0].focus();
+            return clients.openWindow("/");
+        })
     );
 });

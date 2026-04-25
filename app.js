@@ -8,7 +8,7 @@ const CHANGELOG = [
         version: "1.2.6",
         date: "2026-04-25",
         notes: [
-            "Muskelkarte auf ursprüngliches Design zurückgesetzt"
+            "Muskelkarte zum Dashboard hinzugefügt"
         ]
     },
     {
@@ -1358,6 +1358,7 @@ let timerStart = null;
 let restTimerDuration = parseInt(localStorage.getItem("restTimerDuration") || "60");
 let restTimerRemaining = 0;
 let restTimerInterval = null;
+let restTimerEndTime = null;
 let setTimestamps = [];
 let dragState = null;
 
@@ -1395,22 +1396,25 @@ function toggleTimer() {
 function startRestTimer() {
     if (restTimerDuration === 0) return;
     stopRestTimer();
+    restTimerEndTime = Date.now() + restTimerDuration * 1000;
     restTimerRemaining = restTimerDuration;
+    requestNotificationPermission();
     const countdown = document.getElementById("restCountdown");
     if (countdown) countdown.style.display = "";
     updateRestTimerUI();
     restTimerInterval = setInterval(() => {
-        restTimerRemaining--;
+        restTimerRemaining = Math.ceil((restTimerEndTime - Date.now()) / 1000);
         if (restTimerRemaining <= 0) {
             restTimerRemaining = 0;
             stopRestTimer();
             vibrate([100, 50, 100]);
+            showRestNotification();
             const cd = document.getElementById("restCountdown");
             if (cd) cd.style.display = "none";
             return;
         }
         updateRestTimerUI();
-    }, 1000);
+    }, 500);
 }
 
 function stopRestTimer() {
@@ -1418,6 +1422,25 @@ function stopRestTimer() {
         clearInterval(restTimerInterval);
         restTimerInterval = null;
     }
+    restTimerEndTime = null;
+}
+
+function requestNotificationPermission() {
+    if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+    }
+}
+
+function showRestNotification() {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    navigator.serviceWorker.ready.then(reg => {
+        reg.showNotification("Pause beendet! 💪", {
+            body: "Zeit für den nächsten Satz",
+            icon: "icon.png",
+            vibrate: [100, 50, 100],
+            tag: "rest-timer"
+        });
+    }).catch(() => {});
 }
 
 function skipRestTimer() {
@@ -1580,7 +1603,7 @@ function commitDragReorder(fromIdx, toIdx) {
     } else if (fromIdx < currentExerciseIndex && toIdx >= currentExerciseIndex) {
         currentExerciseIndex--;
     } else if (fromIdx > currentExerciseIndex && toIdx <= currentExerciseIndex) {
-        currentExerciseIndex++;
+        currentExerciseIndex = toIdx;
     }
     renderTracking();
 }
@@ -3272,3 +3295,19 @@ document.getElementById("appVersionText").textContent = "Version " + APP_VERSION
 initRestTimerUI();
 renderAll();
 showPage("dashboard");
+
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible" || !restTimerEndTime) return;
+    const remaining = Math.ceil((restTimerEndTime - Date.now()) / 1000);
+    if (remaining <= 0) {
+        restTimerRemaining = 0;
+        stopRestTimer();
+        vibrate([100, 50, 100]);
+        showRestNotification();
+        const cd = document.getElementById("restCountdown");
+        if (cd) cd.style.display = "none";
+    } else {
+        restTimerRemaining = remaining;
+        updateRestTimerUI();
+    }
+});
