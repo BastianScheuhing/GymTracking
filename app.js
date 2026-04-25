@@ -1399,6 +1399,7 @@ function startRestTimer() {
     restTimerEndTime = Date.now() + restTimerDuration * 1000;
     restTimerRemaining = restTimerDuration;
     requestNotificationPermission();
+    scheduleSwNotification(restTimerEndTime);
     const countdown = document.getElementById("restCountdown");
     if (countdown) countdown.style.display = "";
     updateRestTimerUI();
@@ -1408,7 +1409,6 @@ function startRestTimer() {
             restTimerRemaining = 0;
             stopRestTimer();
             vibrate([100, 50, 100]);
-            showRestNotification();
             const cd = document.getElementById("restCountdown");
             if (cd) cd.style.display = "none";
             return;
@@ -1423,6 +1423,7 @@ function stopRestTimer() {
         restTimerInterval = null;
     }
     restTimerEndTime = null;
+    cancelSwNotification();
 }
 
 function requestNotificationPermission() {
@@ -1431,15 +1432,17 @@ function requestNotificationPermission() {
     }
 }
 
-function showRestNotification() {
-    if (!("Notification" in window) || Notification.permission !== "granted") return;
+function scheduleSwNotification(endTime) {
+    if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.ready.then(reg => {
-        reg.showNotification("Pause beendet! 💪", {
-            body: "Zeit für den nächsten Satz",
-            icon: "icon.png",
-            vibrate: [100, 50, 100],
-            tag: "rest-timer"
-        });
+        if (reg.active) reg.active.postMessage({ type: "REST_TIMER_START", endTime });
+    }).catch(() => {});
+}
+
+function cancelSwNotification() {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.ready.then(reg => {
+        if (reg.active) reg.active.postMessage({ type: "REST_TIMER_CANCEL" });
     }).catch(() => {});
 }
 
@@ -3303,7 +3306,6 @@ document.addEventListener("visibilitychange", () => {
         restTimerRemaining = 0;
         stopRestTimer();
         vibrate([100, 50, 100]);
-        showRestNotification();
         const cd = document.getElementById("restCountdown");
         if (cd) cd.style.display = "none";
     } else {
