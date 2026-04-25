@@ -1112,6 +1112,7 @@ function deleteWorkout(i) {
 
 function startFromHistory(i) {
     const w = workouts[i];
+    if (!confirm(`„${w.plan}" als Vorlage starten?\n\nAlle Übungen werden übernommen, Sätze beginnen leer.`)) return;
     const validExercises = w.exercises
         .filter(ex => exercises.find(e => e.id === ex.id))
         .map(ex => ({ id: ex.id, sets: [] }));
