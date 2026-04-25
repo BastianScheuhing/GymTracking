@@ -1,9 +1,16 @@
 ﻿// ---------------------------------------------------------
 // VERSION
 // ---------------------------------------------------------
-const APP_VERSION = "1.2.5";
+const APP_VERSION = "1.2.6";
 
 const CHANGELOG = [
+    {
+        version: "1.2.6",
+        date: "2026-04-25",
+        notes: [
+            "Muskelkarte auf ursprüngliches Design zurückgesetzt"
+        ]
+    },
     {
         version: "1.2.5",
         date: "2026-04-24",
@@ -112,6 +119,7 @@ const CHANGELOG = [
 const DASHBOARD_SECTIONS = [
     { key: "stats",         label: "Wochenstatistik" },
     { key: "comparison",    label: "Wochenvergleich" },
+    { key: "muscleMap",     label: "Muskelkarte" },
     { key: "volume",        label: "Sätze diese Woche" },
     { key: "monthlyPRs",    label: "Bestleistungen diesen Monat" },
     { key: "allTimePRs",    label: "Bestleistungen aller Zeiten" },
@@ -120,10 +128,43 @@ const DASHBOARD_SECTIONS = [
     { key: "calendar",      label: "Kalender" },
 ];
 const DASHBOARD_DEFAULTS = {
-    stats: true, comparison: true, volume: true,
+    stats: true, comparison: true, muscleMap: true, volume: true,
     monthlyPRs: true, allTimePRs: true, progression: true,
     weeklyHistory: true, calendar: true
 };
+
+const MUSCLE_GROUPS = [
+    { id: "chest",      label: "Brust" },
+    { id: "shoulders",  label: "Schultern" },
+    { id: "arms",       label: "Arme" },
+    { id: "abs",        label: "Bauch" },
+    { id: "back",       label: "Rücken" },
+    { id: "legs",       label: "Oberschenkel" },
+    { id: "hamstrings", label: "Beinbeuger" },
+    { id: "glutes",     label: "Gesäß" },
+    { id: "calves",     label: "Waden" },
+];
+
+const MUSCLE_MAP_DEFAULTS = {
+    "Brust":      ["chest"],
+    "Schultern":  ["shoulders"],
+    "Bizeps":     ["arms"],
+    "Trizeps":    ["arms"],
+    "Unterarme":  ["arms"],
+    "Rücken":     ["back"],
+    "Bauch":      ["abs"],
+    "Core":       ["abs"],
+    "Beine":      ["legs", "hamstrings"],
+    "Quadrizeps": ["legs"],
+    "Beinbeuger": ["hamstrings"],
+    "Gesäß":      ["glutes"],
+    "Waden":      ["calves"],
+};
+
+function loadMuscleMapping() {
+    const saved = localStorage.getItem("muscleCategoryMap");
+    return saved ? JSON.parse(saved) : { ...MUSCLE_MAP_DEFAULTS };
+}
 let dashboardConfig = { ...DASHBOARD_DEFAULTS, ...JSON.parse(localStorage.getItem("dashboardConfig") || "{}") };
 let dashboardOrder  = (() => {
     const saved = JSON.parse(localStorage.getItem("dashboardOrder") || "null");
@@ -566,6 +607,169 @@ function afterDashboardRender() {
     });
 }
 
+// ---------------------------------------------------------
+// MUSCLE MAP
+// ---------------------------------------------------------
+function getMuscleHeatColor(sets) {
+    if (!sets || sets === 0) return "#ebebf0";
+    if (sets <= 3)  return "#b3d1ff";
+    if (sets <= 9)  return "#ff9500";
+    return "#ff3b30";
+}
+
+function buildBodySvg(view, muscleSets) {
+    const c = k => getMuscleHeatColor(muscleSets[k] || 0);
+    const neutral = "#e4e4eb";
+    const stroke  = "#c8c8d0";
+    const sw = 1;
+
+    if (view === "front") return `
+        <svg viewBox="0 0 100 220" width="100%">
+            <!-- Head -->
+            <ellipse cx="50" cy="15" rx="13" ry="14" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
+            <rect x="44" y="28" width="12" height="10" rx="3" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Shoulders -->
+            <ellipse cx="24" cy="44" rx="13" ry="9" fill="${c("shoulders")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <ellipse cx="76" cy="44" rx="13" ry="9" fill="${c("shoulders")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Chest -->
+            <path d="M26,38 Q38,33 50,36 L50,64 Q38,70 26,62 Z" fill="${c("chest")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M74,38 Q62,33 50,36 L50,64 Q62,70 74,62 Z" fill="${c("chest")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Abs -->
+            <rect x="42" y="64" width="16" height="44" rx="4" fill="${c("abs")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <line x1="42" y1="79" x2="58" y2="79" stroke="${stroke}" stroke-width="0.8"/>
+            <line x1="42" y1="94" x2="58" y2="94" stroke="${stroke}" stroke-width="0.8"/>
+            <!-- Hip -->
+            <path d="M38,108 Q36,112 35,120 Q50,124 65,120 Q64,112 62,108 Z" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Upper arms -->
+            <ellipse cx="13" cy="66" rx="7" ry="22" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <ellipse cx="87" cy="66" rx="7" ry="22" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Forearms -->
+            <ellipse cx="10" cy="100" rx="5.5" ry="16" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <ellipse cx="90" cy="100" rx="5.5" ry="16" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Quads -->
+            <ellipse cx="36" cy="148" rx="14" ry="26" fill="${c("legs")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <ellipse cx="64" cy="148" rx="14" ry="26" fill="${c("legs")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Calves -->
+            <ellipse cx="35" cy="194" rx="11" ry="19" fill="${c("calves")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <ellipse cx="65" cy="194" rx="11" ry="19" fill="${c("calves")}" stroke="${stroke}" stroke-width="${sw}"/>
+        </svg>`;
+
+    return `
+        <svg viewBox="0 0 100 220" width="100%">
+            <!-- Head -->
+            <ellipse cx="50" cy="15" rx="13" ry="14" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
+            <rect x="44" y="28" width="12" height="10" rx="3" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Traps + upper back -->
+            <path d="M28,36 Q50,30 72,36 L68,64 L32,64 Z" fill="${c("back")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Lats -->
+            <path d="M30,62 Q18,80 20,108 L36,108 L36,64 Z" fill="${c("back")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M70,62 Q82,80 80,108 L64,108 L64,64 Z" fill="${c("back")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Lower back -->
+            <rect x="36" y="64" width="28" height="44" rx="3" fill="${c("back")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Upper arms (tricep side) -->
+            <ellipse cx="13" cy="66" rx="7" ry="22" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <ellipse cx="87" cy="66" rx="7" ry="22" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Forearms -->
+            <ellipse cx="10" cy="100" rx="5.5" ry="16" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <ellipse cx="90" cy="100" rx="5.5" ry="16" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Glutes -->
+            <ellipse cx="37" cy="134" rx="14" ry="16" fill="${c("glutes")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <ellipse cx="63" cy="134" rx="14" ry="16" fill="${c("glutes")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Hamstrings -->
+            <ellipse cx="37" cy="168" rx="12" ry="22" fill="${c("hamstrings")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <ellipse cx="63" cy="168" rx="12" ry="22" fill="${c("hamstrings")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Calves -->
+            <ellipse cx="36" cy="203" rx="10" ry="14" fill="${c("calves")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <ellipse cx="64" cy="203" rx="10" ry="14" fill="${c("calves")}" stroke="${stroke}" stroke-width="${sw}"/>
+        </svg>`;
+}
+function buildMuscleMapSection() {
+    const weekWorkouts = getWorkoutsThisWeek();
+    const mapping = loadMuscleMapping();
+    const setCounts = {};
+    weekWorkouts.forEach(workout => {
+        workout.exercises.forEach(ex => {
+            const exInfo = exercises.find(e => e.id === ex.id);
+            if (!exInfo) return;
+            setCounts[exInfo.category] = (setCounts[exInfo.category] || 0) + ex.sets.length;
+        });
+    });
+
+    const muscleSets = {};
+    Object.entries(setCounts).forEach(([cat, count]) => {
+        (mapping[cat] || []).forEach(m => {
+            muscleSets[m] = (muscleSets[m] || 0) + count;
+        });
+    });
+
+    return `
+        <div class="muscle-map-card">
+            <div class="muscle-map-header">
+                <div class="muscle-map-title">🫀 Muskelkarte – Diese Woche</div>
+                <button onclick="openMuscleMappingPopup()" style="font-size:12px; padding:5px 10px; margin:0; background:#f0f0f5; color:#333;">⚙️ Zuordnen</button>
+            </div>
+            <div class="muscle-map-views">
+                <div class="muscle-map-view">
+                    <div class="muscle-map-label">Vorne</div>
+                    ${buildBodySvg("front", muscleSets)}
+                </div>
+                <div class="muscle-map-view">
+                    <div class="muscle-map-label">Hinten</div>
+                    ${buildBodySvg("back", muscleSets)}
+                </div>
+            </div>
+            <div class="muscle-map-legend">
+                <span class="legend-item"><span class="legend-dot" style="background:#ebebf0;"></span>Kein</span>
+                <span class="legend-item"><span class="legend-dot" style="background:#b3d1ff;"></span>Wenig</span>
+                <span class="legend-item"><span class="legend-dot" style="background:#ff9500;"></span>Mittel</span>
+                <span class="legend-item"><span class="legend-dot" style="background:#ff3b30;"></span>Intensiv</span>
+            </div>
+        </div>`;
+}
+
+function openMuscleMappingPopup() {
+    const mapping = loadMuscleMapping();
+    const rows = categories.map(cat => {
+        const active = mapping[cat] || [];
+        const chips = MUSCLE_GROUPS.map(g => `
+            <label class="muscle-chip-label">
+                <input type="checkbox" data-cat="${cat}" data-muscle="${g.id}" ${active.includes(g.id) ? "checked" : ""}>
+                <span class="muscle-chip${active.includes(g.id) ? " active" : ""}">${g.label}</span>
+            </label>`).join("");
+        return `
+            <div class="mapping-row">
+                <div class="mapping-cat-name">${cat}</div>
+                <div class="mapping-chips">${chips}</div>
+            </div>`;
+    }).join("");
+
+    openPopup(`
+        ${rows || '<p style="color:#888;">Keine Kategorien vorhanden.</p>'}
+        <div class="popup-footer">
+            <button onclick="closePopup()">Abbrechen</button>
+            <button onclick="saveMuscleMappingFromPopup()">Speichern</button>
+        </div>
+    `, "💪 Muskelzuordnung");
+
+    document.querySelectorAll(".muscle-chip-label input").forEach(input => {
+        input.addEventListener("change", () => {
+            input.nextElementSibling.classList.toggle("active", input.checked);
+        });
+    });
+}
+
+function saveMuscleMappingFromPopup() {
+    const mapping = {};
+    document.querySelectorAll(".muscle-chip-label input").forEach(input => {
+        const cat = input.dataset.cat;
+        if (!mapping[cat]) mapping[cat] = [];
+        if (input.checked) mapping[cat].push(input.dataset.muscle);
+    });
+    localStorage.setItem("muscleCategoryMap", JSON.stringify(mapping));
+    closePopup();
+    renderDashboard();
+}
+
 function buildDashboardSections() {
     const S = {};
 
@@ -750,6 +954,8 @@ function buildDashboardSections() {
                 <div class="cal-grid">${cells}</div>
             </div>`;
     } else { S.calendar = ""; }
+
+    S.muscleMap = dashboardConfig.muscleMap ? buildMuscleMapSection() : "";
 
     return S;
 }
