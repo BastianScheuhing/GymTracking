@@ -1,9 +1,18 @@
 ﻿// ---------------------------------------------------------
 // VERSION
 // ---------------------------------------------------------
-const APP_VERSION = "1.2.6";
+const APP_VERSION = "1.2.7";
 
 const CHANGELOG = [
+    {
+        version: "1.2.7",
+        date: "2026-04-25",
+        notes: [
+            "Pause-Timer läuft korrekt weiter wenn der Bildschirm gesperrt ist",
+            "Anzeige nach Timer-Ablauf: zeigt wie lange die Pause bereits überschritten ist",
+            "Drag & Drop im Tracking setzt verschobene Übung direkt als aktive Übung"
+        ]
+    },
     {
         version: "1.2.6",
         date: "2026-04-25",
@@ -1359,6 +1368,8 @@ let restTimerDuration = parseInt(localStorage.getItem("restTimerDuration") || "6
 let restTimerRemaining = 0;
 let restTimerInterval = null;
 let restTimerEndTime = null;
+let restTimerFinishedAt = null;
+let restTimerOverInterval = null;
 let setTimestamps = [];
 let dragState = null;
 
@@ -1396,8 +1407,11 @@ function toggleTimer() {
 function startRestTimer() {
     if (restTimerDuration === 0) return;
     stopRestTimer();
+    restTimerFinishedAt = null;
     restTimerEndTime = Date.now() + restTimerDuration * 1000;
     restTimerRemaining = restTimerDuration;
+    const labelEl = document.getElementById("restTimerLabel");
+    if (labelEl) labelEl.textContent = "⏸ Pause";
     const countdown = document.getElementById("restCountdown");
     if (countdown) countdown.style.display = "";
     updateRestTimerUI();
@@ -1407,8 +1421,9 @@ function startRestTimer() {
             restTimerRemaining = 0;
             stopRestTimer();
             vibrate([100, 50, 100]);
-            const cd = document.getElementById("restCountdown");
-            if (cd) cd.style.display = "none";
+            restTimerFinishedAt = Date.now();
+            updateRestTimerOverUI();
+            restTimerOverInterval = setInterval(updateRestTimerOverUI, 1000);
             return;
         }
         updateRestTimerUI();
@@ -1420,7 +1435,25 @@ function stopRestTimer() {
         clearInterval(restTimerInterval);
         restTimerInterval = null;
     }
+    if (restTimerOverInterval) {
+        clearInterval(restTimerOverInterval);
+        restTimerOverInterval = null;
+    }
     restTimerEndTime = null;
+    restTimerFinishedAt = null;
+}
+
+function updateRestTimerOverUI() {
+    const cd = document.getElementById("restCountdown");
+    if (!cd) return;
+    cd.style.display = "";
+    const elapsed = Math.floor((Date.now() - restTimerFinishedAt) / 1000);
+    const timeEl = document.getElementById("restTimerTime");
+    if (timeEl) timeEl.textContent = "+" + formatTime(elapsed);
+    const labelEl = document.getElementById("restTimerLabel");
+    if (labelEl) labelEl.textContent = "⚠️ Bereits vorbei";
+    const bar = document.getElementById("restTimerBar");
+    if (bar) bar.style.width = "0%";
 }
 
 function skipRestTimer() {
@@ -1470,7 +1503,7 @@ function initRestTimerUI() {
         <div class="rest-timer-card">
             <div id="restCountdown" style="display:none;">
                 <div class="rest-timer-header">
-                    <span class="rest-timer-label">⏸ Pause</span>
+                    <span class="rest-timer-label" id="restTimerLabel">⏸ Pause</span>
                     <span class="rest-timer-time" id="restTimerTime">0:00</span>
                     <button onclick="skipRestTimer()" style="background:none;color:#888;font-size:13px;padding:4px 8px;margin:0;font-weight:600;">Überspringen</button>
                 </div>
@@ -3277,14 +3310,20 @@ renderAll();
 showPage("dashboard");
 
 document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible" || !restTimerEndTime) return;
+    if (document.visibilityState !== "visible") return;
+    if (restTimerFinishedAt) {
+        updateRestTimerOverUI();
+        return;
+    }
+    if (!restTimerEndTime) return;
     const remaining = Math.ceil((restTimerEndTime - Date.now()) / 1000);
     if (remaining <= 0) {
         restTimerRemaining = 0;
         stopRestTimer();
         vibrate([100, 50, 100]);
-        const cd = document.getElementById("restCountdown");
-        if (cd) cd.style.display = "none";
+        restTimerFinishedAt = Date.now();
+        updateRestTimerOverUI();
+        restTimerOverInterval = setInterval(updateRestTimerOverUI, 1000);
     } else {
         restTimerRemaining = remaining;
         updateRestTimerUI();
