@@ -1398,8 +1398,6 @@ function startRestTimer() {
     stopRestTimer();
     restTimerEndTime = Date.now() + restTimerDuration * 1000;
     restTimerRemaining = restTimerDuration;
-    requestNotificationPermission();
-    scheduleSwNotification(restTimerEndTime);
     const countdown = document.getElementById("restCountdown");
     if (countdown) countdown.style.display = "";
     updateRestTimerUI();
@@ -1423,27 +1421,6 @@ function stopRestTimer() {
         restTimerInterval = null;
     }
     restTimerEndTime = null;
-    cancelSwNotification();
-}
-
-function requestNotificationPermission() {
-    if ("Notification" in window && Notification.permission === "default") {
-        Notification.requestPermission();
-    }
-}
-
-function scheduleSwNotification(endTime) {
-    if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.ready.then(reg => {
-        if (reg.active) reg.active.postMessage({ type: "REST_TIMER_START", endTime });
-    }).catch(() => {});
-}
-
-function cancelSwNotification() {
-    if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.ready.then(reg => {
-        if (reg.active) reg.active.postMessage({ type: "REST_TIMER_CANCEL" });
-    }).catch(() => {});
 }
 
 function skipRestTimer() {
