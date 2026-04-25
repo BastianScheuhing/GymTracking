@@ -8,7 +8,8 @@ const CHANGELOG = [
         version: "1.2.8",
         date: "2026-04-25",
         notes: [
-            "Workout aus Historie als Vorlage für neues Training verwenden (▶️ Button)"
+            "Workout aus Historie als Vorlage für neues Training verwenden (▶️ Button)",
+            "Übung im aktiven Workout per Links-Wischen entfernen"
         ]
     },
     {
@@ -454,6 +455,55 @@ function addSetChipSwipeListeners() {
             }
         });
     });
+}
+
+function addExerciseItemSwipeListeners() {
+    document.querySelectorAll(".tracking-ex-item").forEach(item => {
+        let startX = 0;
+
+        item.addEventListener("touchstart", e => {
+            startX = e.touches[0].clientX;
+            item.style.transition = "none";
+        }, { passive: true });
+
+        item.addEventListener("touchmove", e => {
+            const dx = e.touches[0].clientX - startX;
+            if (dx < 0) {
+                e.preventDefault();
+                item.style.transform = `translateX(${Math.max(dx, -100)}px)`;
+                const pct = Math.min(Math.abs(dx) / 70, 1);
+                item.style.background = `rgb(${Math.round(255)}, ${Math.round(59 - 59 * pct)}, ${Math.round(48 - 48 * pct)})`;
+                item.style.color = pct > 0.4 ? "#fff" : "";
+            }
+        }, { passive: false });
+
+        item.addEventListener("touchend", e => {
+            const dx = e.changedTouches[0].clientX - startX;
+            if (dx < -60) {
+                item.style.transition = "transform 0.18s ease, opacity 0.18s ease";
+                item.style.transform = "translateX(-150px)";
+                item.style.opacity = "0";
+                setTimeout(() => {
+                    deleteTrackingExercise(parseInt(item.dataset.idx));
+                }, 180);
+            } else {
+                item.style.transition = "transform 0.2s ease, background 0.2s ease, color 0.2s ease";
+                item.style.transform = "translateX(0)";
+                item.style.background = "";
+                item.style.color = "";
+            }
+        });
+    });
+}
+
+function deleteTrackingExercise(idx) {
+    currentTracking.exercises.splice(idx, 1);
+    if (idx < currentExerciseIndex) {
+        currentExerciseIndex--;
+    } else if (idx === currentExerciseIndex) {
+        currentExerciseIndex = Math.min(currentExerciseIndex, currentTracking.exercises.length - 1);
+    }
+    renderTracking();
 }
 
 // ---------------------------------------------------------
@@ -2043,6 +2093,7 @@ function renderTracking() {
 
     addSetChipSwipeListeners();
     addExerciseDragListeners();
+    addExerciseItemSwipeListeners();
 }
 
 // ---------------------------------------------------------
