@@ -645,6 +645,24 @@ canvas {
     white-space: nowrap;
 }
 
+.error-toast {
+    position: fixed;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #ff3b30;
+    color: #fff;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 12px 20px;
+    border-radius: 14px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    z-index: 9999;
+    animation: toastIn 0.3s ease;
+    max-width: calc(100% - 32px);
+    text-align: center;
+}
+
 @keyframes toastIn {
     from { opacity: 0; transform: translateX(-50%) translateY(10px); }
     to   { opacity: 1; transform: translateX(-50%) translateY(0); }

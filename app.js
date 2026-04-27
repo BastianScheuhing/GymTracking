@@ -248,11 +248,30 @@ let exercises = JSON.parse(localStorage.getItem("exercises")) || [];
 let plans = JSON.parse(localStorage.getItem("plans")) || [];
 let workouts = JSON.parse(localStorage.getItem("workouts")) || [];
 
+// O(1) lookup index over `exercises`. Refreshed inside save() and after migrations.
+let exerciseById = new Map();
+function rebuildExerciseIndex() {
+    exerciseById = new Map(exercises.map(e => [e.id, e]));
+}
+
 // ---------------------------------------------------------
 // ID GENERATOR
 // ---------------------------------------------------------
 function generateId(prefix = "ex") {
     return prefix + "_" + Math.random().toString(36).substring(2, 10);
+}
+
+// Escape user-provided strings before interpolating into innerHTML, attribute values, or
+// HTML text. Without this, an exercise / plan / category name (or imported backup) containing
+// `<`, `&`, or `"` could break the page or inject markup.
+function esc(str) {
+    if (str == null) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
 }
 
 // ---------------------------------------------------------
@@ -303,7 +322,7 @@ function getVolumeByCategory() {
     const vol = {};
     getWorkoutsThisWeek().forEach(w => {
         w.exercises.forEach(ex => {
-            const info = exercises.find(e => e.id === ex.id);
+            const info = exerciseById.get(ex.id);
             if (!info) return;
             vol[info.category] = (vol[info.category] || 0) + ex.sets.length;
         });
@@ -336,7 +355,7 @@ function getAllTimePRs() {
         });
     });
     return Object.entries(prMap).map(([id, pr]) => {
-        const info = exercises.find(e => e.id === id);
+        const info = exerciseById.get(id);
         return info ? { id, name: info.name, category: info.category, ...pr } : null;
     }).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -361,49 +380,6 @@ function calendarDayClick(dateStr) {
     showPage("history");
     const idx = workouts.findIndex(w => w.date === dateStr);
     if (idx >= 0) setTimeout(() => showWorkoutDetails(idx), 80);
-}
-
-function renderCalendar() { renderDashboard(); } // legacy alias
-
-function _renderCalendar_unused() {
-    const box = document.getElementById("calendarBox");
-    if (!box) return;
-
-    const MONTHS = ["Januar","Februar","März","April","Mai","Juni",
-                    "Juli","August","September","Oktober","November","Dezember"];
-    const year  = calendarYear;
-    const month = calendarMonth;
-
-    const dateMap = {};
-    workouts.forEach(w => { dateMap[w.date] = true; });
-
-    const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // Mon=0
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const todayStr = new Date().toISOString().slice(0, 10);
-
-    let cells = "";
-    for (let i = 0; i < firstDow; i++) cells += `<div class="cal-cell empty"></div>`;
-    for (let d = 1; d <= daysInMonth; d++) {
-        const ds = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-        const haW = dateMap[ds];
-        const isT = ds === todayStr;
-        cells += `<div class="cal-cell${haW ? " has-workout" : ""}${isT ? " today" : ""}"
-            ${haW ? `onclick="calendarDayClick('${ds}')"` : ""}>${d}</div>`;
-    }
-
-    box.innerHTML = `
-        <div class="cal-card">
-            <div class="cal-header">
-                <button class="cal-nav-btn" onclick="calendarPrev()">‹</button>
-                <span class="cal-title">${MONTHS[month]} ${year}</span>
-                <button class="cal-nav-btn" onclick="calendarNext()">›</button>
-            </div>
-            <div class="cal-weekdays">
-                <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
-            </div>
-            <div class="cal-grid">${cells}</div>
-        </div>
-    `;
 }
 
 function getLastSessionData(exId) {
@@ -572,16 +548,36 @@ function repairMissingExercises() {
 
 migrateToIds();
 repairMissingExercises();
+rebuildExerciseIndex();
 
 
 // ---------------------------------------------------------
 // SAVE
 // ---------------------------------------------------------
 function save() {
-    localStorage.setItem("categories", JSON.stringify(categories));
-    localStorage.setItem("exercises", JSON.stringify(exercises));
-    localStorage.setItem("plans", JSON.stringify(plans));
-    localStorage.setItem("workouts", JSON.stringify(workouts));
+    try {
+        localStorage.setItem("categories", JSON.stringify(categories));
+        localStorage.setItem("exercises", JSON.stringify(exercises));
+        localStorage.setItem("plans", JSON.stringify(plans));
+        localStorage.setItem("workouts", JSON.stringify(workouts));
+        rebuildExerciseIndex();
+    } catch (err) {
+        console.error("save() failed:", err);
+        const isQuota = err && (err.name === "QuotaExceededError" || err.code === 22);
+        showErrorToast(isQuota
+            ? "⚠️ Speicher voll – bitte Daten exportieren und alte Workouts löschen"
+            : "⚠️ Speichern fehlgeschlagen – Daten könnten verloren gehen");
+    }
+}
+
+function showErrorToast(message) {
+    const existing = document.querySelector(".error-toast");
+    if (existing) existing.remove();
+    const toast = document.createElement("div");
+    toast.className = "error-toast";
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 5000);
 }
 
 // ---------------------------------------------------------
@@ -623,6 +619,43 @@ function closePopup() {
     overlay.innerHTML = "";
 }
 
+// Promise-based replacements for native confirm()/alert() so dialogs match the app's popup design
+// (better on iOS, can't be blocked, supports markup).
+function confirmDialog({
+    message,
+    title = "Bestätigen",
+    confirmLabel = "OK",
+    cancelLabel = "Abbrechen",
+    danger = false
+} = {}) {
+    return new Promise(resolve => {
+        const safeMsg = esc(message).replace(/\n/g, "<br>");
+        const confirmStyle = danger ? "background:#ff3b30; color:#fff;" : "";
+        openPopup(`
+            <p style="margin:0 0 18px; line-height:1.45;">${safeMsg}</p>
+            <div class="popup-footer">
+                <button id="__confirmCancel">${esc(cancelLabel)}</button>
+                <button id="__confirmOk" style="${confirmStyle}">${esc(confirmLabel)}</button>
+            </div>
+        `, title);
+        document.getElementById("__confirmCancel").onclick = () => { closePopup(); resolve(false); };
+        document.getElementById("__confirmOk").onclick     = () => { closePopup(); resolve(true);  };
+    });
+}
+
+function alertDialog(message, title = "") {
+    return new Promise(resolve => {
+        const safeMsg = esc(message).replace(/\n/g, "<br>");
+        openPopup(`
+            <p style="margin:0 0 18px; line-height:1.45;">${safeMsg}</p>
+            <div class="popup-footer">
+                <button id="__alertOk" style="width:100%;">OK</button>
+            </div>
+        `, title);
+        document.getElementById("__alertOk").onclick = () => { closePopup(); resolve(); };
+    });
+}
+
 // ---------------------------------------------------------
 // COLLAPSIBLE
 // ---------------------------------------------------------
@@ -657,11 +690,21 @@ function showPage(page) {
     else if (page === "tracking")   renderTracking();
 }
 
+// Per-render memo cache. Filled while building the dashboard, cleared after.
+// Lets `getWorkoutsThisWeek` / `getWorkoutsLastWeek` skip re-filtering all workouts
+// on the 2nd/3rd call within the same render.
+let dashboardCache = null;
+
 function renderDashboard() {
-    const sections = buildDashboardSections();
-    document.getElementById("dashboardContent").innerHTML =
-        dashboardOrder.map(k => sections[k] || "").join("");
-    afterDashboardRender();
+    dashboardCache = {};
+    try {
+        const sections = buildDashboardSections();
+        document.getElementById("dashboardContent").innerHTML =
+            dashboardOrder.map(k => sections[k] || "").join("");
+        afterDashboardRender();
+    } finally {
+        dashboardCache = null;
+    }
 }
 
 function afterDashboardRender() {
@@ -755,7 +798,7 @@ function buildMuscleMapSection() {
     const setCounts = {};
     weekWorkouts.forEach(workout => {
         workout.exercises.forEach(ex => {
-            const exInfo = exercises.find(e => e.id === ex.id);
+            const exInfo = exerciseById.get(ex.id);
             if (!exInfo) return;
             setCounts[exInfo.category] = (setCounts[exInfo.category] || 0) + ex.sets.length;
         });
@@ -799,12 +842,12 @@ function openMuscleMappingPopup() {
         const active = mapping[cat] || [];
         const chips = MUSCLE_GROUPS.map(g => `
             <label class="muscle-chip-label">
-                <input type="checkbox" data-cat="${cat}" data-muscle="${g.id}" ${active.includes(g.id) ? "checked" : ""}>
+                <input type="checkbox" data-cat="${esc(cat)}" data-muscle="${g.id}" ${active.includes(g.id) ? "checked" : ""}>
                 <span class="muscle-chip${active.includes(g.id) ? " active" : ""}">${g.label}</span>
             </label>`).join("");
         return `
             <div class="mapping-row">
-                <div class="mapping-cat-name">${cat}</div>
+                <div class="mapping-cat-name">${esc(cat)}</div>
                 <div class="mapping-chips">${chips}</div>
             </div>`;
     }).join("");
@@ -876,7 +919,7 @@ function buildDashboardSections() {
         const maxSets = Math.max(...Object.values(volByCat));
         const rows = Object.entries(volByCat).sort((a, b) => b[1] - a[1]).map(([cat, sets]) => `
             <div class="volume-row">
-                <div class="volume-label">${cat}</div>
+                <div class="volume-label">${esc(cat)}</div>
                 <div class="volume-bar-wrap"><div class="volume-bar" style="width:${Math.round(sets/maxSets*100)}%"></div></div>
                 <div class="volume-count">${sets}</div>
             </div>`).join("");
@@ -900,14 +943,14 @@ function buildDashboardSections() {
                     <div id="pr-list" style="display:${prSectionExpanded ? "block" : "none"};">
                         ${visiblePRs.map(pr => `
                             <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
-                                <div>${pr.name}</div>
+                                <div>${esc(pr.name)}</div>
                                 <div><strong>${pr.newMax} kg</strong> <span class="pr-delta">↑ +${pr.delta} kg</span></div>
                             </div>`).join("")}
                         ${hasMore ? `
                             <div id="pr-hidden" style="display:${prMoreExpanded ? "block" : "none"};">
                                 ${hiddenPRs.map(pr => `
                                     <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
-                                        <div>${pr.name}</div>
+                                        <div>${esc(pr.name)}</div>
                                         <div><strong>${pr.newMax} kg</strong> <span class="pr-delta">↑ +${pr.delta} kg</span></div>
                                     </div>`).join("")}
                             </div>
@@ -935,7 +978,7 @@ function buildDashboardSections() {
             <div id="all-time-pr-list" style="display:${allTimePRsCollapsed ? "none" : "block"};">
                 ${allTimePRs.map(pr => `
                     <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
-                        <div>${pr.name}<br><small style="color:#aaa;font-size:12px;">${pr.category}</small></div>
+                        <div>${esc(pr.name)}<br><small style="color:#aaa;font-size:12px;">${esc(pr.category)}</small></div>
                         <div><strong>${pr.weight} kg</strong> <span style="color:#888;font-size:13px;">× ${pr.reps}</span></div>
                     </div>`).join("")}
             </div>
@@ -954,7 +997,7 @@ function buildDashboardSections() {
                     const plateauBadge  = p.plateau ? `<span class="badge-plateau">⚠️ Plateau</span>` : "";
                     return `
                         <h4 onclick="toggleProgression('${p.id}')" class="progression-header">
-                            <span>${p.name} ${prBadge}${plateauBadge}</span>
+                            <span>${esc(p.name)} ${prBadge}${plateauBadge}</span>
                             <span class="progression-header-controls">
                                 <button onclick="showExerciseDetail('${p.id}');event.stopPropagation();"
                                         style="font-size:12px;padding:3px 8px;margin:0;">Details</button>
@@ -983,7 +1026,7 @@ function buildDashboardSections() {
                     <div id="week_${key}">
                         ${groups[key].map(w => `
                             <div class="history-entry">
-                                <strong>${w.plan}</strong> – ${w.date}${w.duration ? ` · ${w.duration} min` : ""}
+                                <strong>${esc(w.plan)}</strong> – ${w.date}${w.duration ? ` · ${w.duration} min` : ""}
                             </div>`).join("")}
                     </div>
                 </div>`).join("")}`;
@@ -1055,7 +1098,7 @@ function renderHistory() {
         return `
             <div class="history-card anim-fade-in" style="animation-delay:${index * 0.05}s">
                 <div class="history-card-main" onclick="showWorkoutDetails(${originalIndex})">
-                    <div class="history-card-name">${w.plan}</div>
+                    <div class="history-card-name">${esc(w.plan)}</div>
                     <div class="history-card-meta">${w.date}${w.duration ? ` · ${w.duration} min` : ""}</div>
                 </div>
                 <div class="history-card-actions">
@@ -1078,13 +1121,13 @@ function showWorkoutDetails(index) {
     if (card) card.classList.add("overview-highlight");
 
     const exercisesHtml = w.exercises.map(ex => {
-        const exInfo = exercises.find(e => e.id === ex.id);
+        const exInfo = exerciseById.get(ex.id);
         const setsHtml = ex.sets.map((s, i) =>
             `<span class="set-chip">S${i + 1}: ${s.weight}kg × ${s.reps}</span>`
         ).join("");
         return `
             <div class="detail-exercise">
-                <div class="detail-ex-name">${exInfo ? exInfo.name : "Unbekannte Übung"}</div>
+                <div class="detail-ex-name">${exInfo ? esc(exInfo.name) : "Unbekannte Übung"}</div>
                 <div class="detail-sets">${setsHtml}</div>
             </div>
         `;
@@ -1093,7 +1136,7 @@ function showWorkoutDetails(index) {
     details.innerHTML = `
         <div class="detail-card">
             <div class="detail-header">
-                <strong>${w.plan}</strong>
+                <strong>${esc(w.plan)}</strong>
                 <span class="detail-meta">${w.date}${w.duration ? ` · ${w.duration} min` : ""}</span>
             </div>
             ${w.note ? `<div class="detail-exercise"><div class="note-box" style="margin:0;"><strong>Notiz:</strong> ${w.note}</div></div>` : ""}
@@ -1102,23 +1145,34 @@ function showWorkoutDetails(index) {
     `;
 }
 
-function deleteWorkout(i) {
-    if (!confirm("Workout wirklich löschen?")) return;
+async function deleteWorkout(i) {
+    const ok = await confirmDialog({
+        message: "Workout wirklich löschen?",
+        title: "Workout löschen",
+        confirmLabel: "Löschen",
+        danger: true
+    });
+    if (!ok) return;
     workouts.splice(i, 1);
     save();
     renderHistory();
     document.getElementById("overviewDetails").innerHTML = "";
 }
 
-function startFromHistory(i) {
+async function startFromHistory(i) {
     const w = workouts[i];
-    if (!confirm(`„${w.plan}" als Vorlage starten?\n\nAlle Übungen werden übernommen, Sätze beginnen leer.`)) return;
+    const ok = await confirmDialog({
+        message: `„${w.plan}" als Vorlage starten?\nAlle Übungen werden übernommen, Sätze beginnen leer.`,
+        title: "Workout starten",
+        confirmLabel: "Starten"
+    });
+    if (!ok) return;
     const validExercises = w.exercises
-        .filter(ex => exercises.find(e => e.id === ex.id))
+        .filter(ex => exerciseById.has(ex.id))
         .map(ex => ({ id: ex.id, sets: [] }));
 
     if (validExercises.length === 0) {
-        alert("Keine gültigen Übungen in diesem Workout gefunden.");
+        await alertDialog("Keine gültigen Übungen in diesem Workout gefunden.", "Hinweis");
         return;
     }
 
@@ -1151,13 +1205,13 @@ function renderCategories() {
     const select = document.getElementById("exerciseCategory");
 
     if (select) {
-        select.innerHTML = categories.map(c => `<option>${c}</option>`).join("");
+        select.innerHTML = categories.map(c => `<option>${esc(c)}</option>`).join("");
     }
 
     if (list) {
         list.innerHTML = categories.map((c, i) => `
             <span class="cat-chip">
-                ${c}
+                ${esc(c)}
                 <button class="cat-chip-delete" onclick="deleteCategory(${i})">×</button>
             </span>
         `).join("");
@@ -1197,11 +1251,11 @@ function addExercise() {
 }
 
 function renameExercisePopup(id) {
-    const ex = exercises.find(e => e.id === id);
+    const ex = exerciseById.get(id);
 
     openPopup(`
         <h3>Übung umbenennen</h3>
-        <input id="renameInput" value="${ex.name}">
+        <input id="renameInput" value="${esc(ex.name)}">
         <div class="popup-footer">
             <button onclick="closePopup()">Abbrechen</button>
             <button onclick="renameExercise('${id}')">Speichern</button>
@@ -1213,7 +1267,7 @@ function renameExercise(id) {
     const newName = document.getElementById("renameInput").value.trim();
     if (!newName) return;
 
-    const ex = exercises.find(e => e.id === id);
+    const ex = exerciseById.get(id);
     ex.name = newName;
 
     save();
@@ -1267,13 +1321,13 @@ function renderExercises() {
             <div class="ex-group anim-fade-in" style="animation-delay:${delay}s">
                 <div class="ex-group-header" onclick="toggleCollapse('${safeId}')">
                     <span id="arrow-${safeId}">▾</span>
-                    <span>${category}</span>
+                    <span>${esc(category)}</span>
                     <span class="ex-group-count">${items.length}</span>
                 </div>
                 <div id="${safeId}" class="ex-group-items">
                     ${items.map(({ ex, i }) => `
                         <div class="ex-item">
-                            <span class="ex-item-name">${ex.name}</span>
+                            <span class="ex-item-name">${esc(ex.name)}</span>
                             <div class="ex-item-actions">
                                 <button class="ex-icon-btn" onclick="renameExercisePopup('${ex.id}')">✏️</button>
                                 <button class="ex-icon-btn ex-delete" onclick="deleteExercise(${i})">🗑️</button>
@@ -1304,7 +1358,7 @@ function renamePlanPopup(index) {
     const plan = plans[index];
     openPopup(`
         <h3>Plan umbenennen</h3>
-        <input id="renameInput" value="${plan.name}">
+        <input id="renameInput" value="${esc(plan.name)}">
         <div class="popup-footer">
             <button onclick="closePopup()">Abbrechen</button>
             <button onclick="renamePlan(${index})">Speichern</button>
@@ -1323,8 +1377,14 @@ function renamePlan(index) {
     renderTracking();
 }
 
-function deletePlan(i) {
-    if (!confirm("Plan wirklich löschen?")) return;
+async function deletePlan(i) {
+    const ok = await confirmDialog({
+        message: "Plan wirklich löschen?",
+        title: "Plan löschen",
+        confirmLabel: "Löschen",
+        danger: true
+    });
+    if (!ok) return;
     plans.splice(i, 1);
     save();
     renderPlans();
@@ -1357,11 +1417,11 @@ function renderPlans() {
     list.innerHTML = plans.map((p, i) => {
         const availableExercises = exercises.filter(ex => !p.exercises.includes(ex.id));
         const exerciseOptions = availableExercises
-            .map(ex => `<option value="${ex.id}">${ex.name}</option>`)
+            .map(ex => `<option value="${ex.id}">${esc(ex.name)}</option>`)
             .join("");
 
         const chipsHtml = p.exercises.map(exId => {
-            const ex = exercises.find(e => e.id === exId);
+            const ex = exerciseById.get(exId);
             return `
                 <span class="plan-ex-chip">
                     ${ex ? ex.name : "?"}
@@ -1374,13 +1434,13 @@ function renderPlans() {
             const total = exercises.filter(ex => ex.category === c).length;
             const added = exercises.filter(ex => ex.category === c && p.exercises.includes(ex.id)).length;
             const full  = total > 0 && added === total;
-            return `<option value="${c}" ${full ? "disabled" : ""}>${c}${full ? " ✓" : ""}</option>`;
+            return `<option value="${esc(c)}" ${full ? "disabled" : ""}>${esc(c)}${full ? " ✓" : ""}</option>`;
         }).join("");
 
         return `
             <div class="plan-card" id="planBox_${i}">
                 <div class="plan-card-header" onclick="toggleCollapse('plan_${i}'); highlightPlan(${i});">
-                    <span class="plan-card-title">${p.name}</span>
+                    <span class="plan-card-title">${esc(p.name)}</span>
                     <div style="display:flex; align-items:center; gap:8px;">
                         <span id="arrow-plan_${i}">▸</span>
                         <button class="ex-icon-btn" onclick="renamePlanPopup(${i}); event.stopPropagation();">✏️</button>
@@ -1408,7 +1468,7 @@ function renderPlans() {
         `;
     }).join("");
 
-    select.innerHTML = plans.map((p, i) => `<option value="${i}">${p.name}</option>`).join("");
+    select.innerHTML = plans.map((p, i) => `<option value="${i}">${esc(p.name)}</option>`).join("");
 }
 
 function filterPlanExercises(planIndex) {
@@ -1429,7 +1489,7 @@ function filterPlanExercises(planIndex) {
     });
 
     selectEl.innerHTML = filtered.length
-        ? filtered.map(ex => `<option value="${ex.id}">${ex.name}</option>`).join("")
+        ? filtered.map(ex => `<option value="${ex.id}">${esc(ex.name)}</option>`).join("")
         : `<option value="" disabled>Keine Übungen gefunden</option>`;
 }
 
@@ -1737,14 +1797,14 @@ function startFreeTraining() {
     renderTracking();
 }
 
-function startTracking() {
+async function startTracking() {
     const planIndex = document.getElementById("trackingPlanSelect").value;
     if (planIndex === "") return;
 
     const plan = plans[planIndex];
 
     if (!plan.exercises || plan.exercises.length === 0) {
-        alert(`Der Plan "${plan.name}" hat noch keine Übungen. Bitte zuerst Übungen im Plan hinzufügen.`);
+        await alertDialog(`Der Plan „${plan.name}" hat noch keine Übungen. Bitte zuerst Übungen im Plan hinzufügen.`, "Plan unvollständig");
         return;
     }
 
@@ -1806,7 +1866,7 @@ function filterTrackingExercises() {
     });
 
     selectEl.innerHTML = filtered.length
-        ? filtered.map(ex => `<option value="${ex.id}">${ex.name}</option>`).join("")
+        ? filtered.map(ex => `<option value="${ex.id}">${esc(ex.name)}</option>`).join("")
         : `<option value="" disabled>Keine Übungen gefunden</option>`;
 }
 
@@ -1834,9 +1894,9 @@ function dropExercise(e, index) {
 // ---------------------------------------------------------
 function editTrackingExercise(exIndex) {
     const ex = currentTracking.exercises[exIndex];
-    const exInfo = exercises.find(e => e.id === ex.id);
+    const exInfo = exerciseById.get(ex.id);
 
-    let html = `<h3>${exInfo ? exInfo.name : "Unbekannt"} bearbeiten</h3>`;
+    let html = `<h3>${exInfo ? esc(exInfo.name) : "Unbekannt"} bearbeiten</h3>`;
 
     ex.sets.forEach((s, i) => {
         html += `
@@ -1890,6 +1950,10 @@ function renderTracking() {
     const area = document.getElementById("trackingArea");
     const startAreas = document.querySelectorAll(".tracking-start-area");
 
+    // Preserve scroll position across re-renders. Without this, every saveSet() call
+    // jumps the user back to the top of the page on mobile.
+    const scrollY = window.scrollY;
+
     if (!currentTracking) {
         area.innerHTML = "";
         const startEl = document.getElementById("trackingStartTime");
@@ -1912,14 +1976,14 @@ function renderTracking() {
     const availableExercises = exercises.filter(ex => !alreadyAdded.includes(ex.id));
 
     const exerciseOptions = availableExercises
-        .map(ex => `<option value="${ex.id}">${ex.name}</option>`)
+        .map(ex => `<option value="${ex.id}">${esc(ex.name)}</option>`)
         .join("");
 
     const categoryOptions = [...categories].sort().map(c => {
         const total = exercises.filter(ex => ex.category === c).length;
         const added = exercises.filter(ex => ex.category === c && alreadyAdded.includes(ex.id)).length;
         const full  = total === 0 || added === total;
-        return `<option value="${c}" ${full ? "disabled" : ""}>${c}${full ? " ✓" : ""}</option>`;
+        return `<option value="${esc(c)}" ${full ? "disabled" : ""}>${esc(c)}${full ? " ✓" : ""}</option>`;
     }).join("");
 
     const startEl = document.getElementById("trackingStartTime");
@@ -1982,12 +2046,12 @@ function renderTracking() {
     // -----------------------------------------------------
     if (currentExerciseIndex >= total) {
         const doneList = currentTracking.exercises.map(ex => {
-            const info = exercises.find(e => e.id === ex.id);
+            const info = exerciseById.get(ex.id);
             const setsText = ex.sets.map(s => `${s.weight}×${s.reps}`).join(", ");
             return `
                 <div class="tracking-ex-item done">
                     <div>
-                        <div>${info ? info.name : "Unbekannt"}</div>
+                        <div>${info ? esc(info.name) : "Unbekannt"}</div>
                         ${setsText ? `<div class="tracking-ex-sets">${setsText}</div>` : ""}
                     </div>
                 </div>
@@ -2011,7 +2075,7 @@ function renderTracking() {
     // CURRENT EXERCISE
     // -----------------------------------------------------
     const ex = currentTracking.exercises[currentExerciseIndex];
-    const exInfo = exercises.find(e => e.id === ex.id);
+    const exInfo = exerciseById.get(ex.id);
 
     const setsChips = ex.sets.length > 0
         ? `<div class="tracking-sets">${ex.sets.map((s, i) => `<span class="set-chip" data-set-index="${i}">S${i + 1}: ${s.weight}kg × ${s.reps}</span>`).join("")}</div>`
@@ -2028,11 +2092,11 @@ function renderTracking() {
     ` : "";
 
     const exerciseListHtml = currentTracking.exercises.map((item, idx) => {
-        const info = exercises.find(e => e.id === item.id);
+        const info = exerciseById.get(item.id);
         const isCurrent = idx === currentExerciseIndex;
         return `
             <div class="tracking-ex-item${isCurrent ? " current" : idx < currentExerciseIndex ? " done" : ""}" data-idx="${idx}">
-                <span>${info ? info.name : "Unbekannt"}</span>
+                <span>${info ? esc(info.name) : "Unbekannt"}</span>
                 <span class="drag-handle">≡</span>
             </div>
         `;
@@ -2045,7 +2109,7 @@ function renderTracking() {
 
     area.innerHTML = `
         <div class="tracking-header">
-            <div class="tracking-ex-name">${exInfo ? exInfo.name : "Unbekannt"}</div>
+            <div class="tracking-ex-name">${exInfo ? esc(exInfo.name) : "Unbekannt"}</div>
             <div style="text-align:right;">
                 <div class="tracking-progress">${done + 1} / ${total}</div>
                 ${etaHtml}
@@ -2095,6 +2159,10 @@ function renderTracking() {
     addSetChipSwipeListeners();
     addExerciseDragListeners();
     addExerciseItemSwipeListeners();
+
+    // After replacing the active-exercise area, restore the user's scroll position so
+    // saving a set doesn't jump the page back to the top.
+    requestAnimationFrame(() => window.scrollTo(0, scrollY));
 }
 
 // ---------------------------------------------------------
@@ -2142,12 +2210,18 @@ function nextExercise() {
 // ---------------------------------------------------------
 // FINISH WORKOUT
 // ---------------------------------------------------------
-function finishWorkoutPrompt() {
+async function finishWorkoutPrompt() {
     const isComplete = currentExerciseIndex >= currentTracking.exercises.length;
 
     if (!isComplete) {
-        const warningMsg = `Du hast noch ${currentTracking.exercises.length - currentExerciseIndex} Übung${currentTracking.exercises.length - currentExerciseIndex !== 1 ? "en" : ""} nicht abgeschlossen.\n\nMöchtest du das Workout trotzdem beenden?`;
-        if (!confirm(warningMsg)) return;
+        const remaining = currentTracking.exercises.length - currentExerciseIndex;
+        const ok = await confirmDialog({
+            message: `Du hast noch ${remaining} Übung${remaining !== 1 ? "en" : ""} nicht abgeschlossen.\nMöchtest du das Workout trotzdem beenden?`,
+            title: "Workout beenden?",
+            confirmLabel: "Beenden",
+            danger: true
+        });
+        if (!ok) return;
     }
 
     openPopup(`
@@ -2214,13 +2288,13 @@ function openWorkoutEditor(index) {
     let contentHtml = noteHtml;
 
     w.exercises.forEach((ex, exIndex) => {
-        const exInfo = exercises.find(e => e.id === ex.id);
+        const exInfo = exerciseById.get(ex.id);
         const name = exInfo ? exInfo.name : "Unbekannte Übung";
 
         contentHtml += `
             <div class="editor-exercise-block" style="margin-bottom:20px; padding:16px; background:#f9f9fb; border-radius:14px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                    <h4 style="margin:0; font-size:15px; font-weight:600;">${name}</h4>
+                    <h4 style="margin:0; font-size:15px; font-weight:600;">${esc(name)}</h4>
                     <button onclick="deleteEditorExercise(${exIndex})"
                             style="background:none; border:none; font-size:18px; cursor:pointer; color:#ff3b30; padding:0; margin:0;">×</button>
                 </div>
@@ -2261,17 +2335,17 @@ function openWorkoutEditor(index) {
     openPopup(addExerciseButton + contentHtml + footerHtml, "Workout bearbeiten");
 }
 
-function addExerciseToWorkoutEditor() {
+async function addExerciseToWorkoutEditor() {
     const w = workouts[workoutEditIndex];
     const usedExerciseIds = w.exercises.map(ex => ex.id);
     const availableExercises = exercises.filter(ex => !usedExerciseIds.includes(ex.id));
 
     let exerciseOptions = availableExercises
-        .map(ex => `<option value="${ex.id}">${ex.name}</option>`)
+        .map(ex => `<option value="${ex.id}">${esc(ex.name)}</option>`)
         .join("");
 
     if (!exerciseOptions) {
-        alert("Alle Übungen sind bereits in diesem Workout.");
+        await alertDialog("Alle Übungen sind bereits in diesem Workout.", "Hinweis");
         return;
     }
 
@@ -2288,12 +2362,12 @@ function addExerciseToWorkoutEditor() {
     `, "Übung hinzufügen");
 }
 
-function selectExerciseForWorkout() {
+async function selectExerciseForWorkout() {
     const select = document.getElementById("exerciseSelectForWorkout");
     const exerciseId = select.value;
 
     if (!exerciseId) {
-        alert("Bitte wählen Sie eine Übung aus.");
+        await alertDialog("Bitte wählen Sie eine Übung aus.", "Hinweis");
         return;
     }
 
@@ -2401,7 +2475,7 @@ function getExerciseProgression() {
 
     workouts.forEach(w => {
         w.exercises.forEach(ex => {
-            const exInfo = exercises.find(e => e.id === ex.id);
+            const exInfo = exerciseById.get(ex.id);
             if (!exInfo) return;
 
             if (!map[ex.id]) map[ex.id] = { name: exInfo.name, volumeValues: [], bestSetValues: [] };
@@ -2661,204 +2735,6 @@ function toggleProgression(id) {
     }
 }
 
-function renderInsights() { renderDashboard(); } // legacy alias
-
-function _renderInsights_unused() {
-    const box = document.getElementById("insightsBox");
-
-    if (workouts.length === 0) {
-        box.innerHTML = `<p style="color:#888;">Noch keine Insights verfügbar.</p>`;
-        return;
-    }
-
-    const thisWeekCount = getWorkoutsThisWeek().length;
-    const lastWeekCount = getWorkoutsLastWeek().length;
-    const comparison = weeklyComparisonText(thisWeekCount, lastWeekCount);
-    const progression = getExerciseProgression();
-    const prs = getPRsThisMonth();
-    const volByCat = getVolumeByCategory();
-    const allTimePRs = getAllTimePRs();
-
-    let prSectionHtml = "";
-    if (prs.length > 0) {
-        const visiblePRs = prs.slice(0, 5);
-        const hiddenPRs = prs.slice(5);
-        const hasMore = hiddenPRs.length > 0;
-
-        prSectionHtml = `
-            <div class="pr-section">
-                <div class="pr-header" onclick="togglePRSection()">
-                    <h3>🏆 Bestleistungen diesen Monat</h3>
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <span class="pr-count-badge">${prs.length}</span>
-                        <span id="arrow-pr-section">${prSectionExpanded ? "▾" : "▸"}</span>
-                    </div>
-                </div>
-                <div id="pr-list" style="display:${prSectionExpanded ? "block" : "none"};">
-                    ${visiblePRs.map(pr => `
-                        <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
-                            <div>${pr.name}</div>
-                            <div><strong>${pr.newMax} kg</strong> <span class="pr-delta">↑ +${pr.delta} kg</span></div>
-                        </div>
-                    `).join("")}
-                    ${hasMore ? `
-                        <div id="pr-hidden" style="display:${prMoreExpanded ? "block" : "none"};">
-                            ${hiddenPRs.map(pr => `
-                                <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
-                                    <div>${pr.name}</div>
-                                    <div><strong>${pr.newMax} kg</strong> <span class="pr-delta">↑ +${pr.delta} kg</span></div>
-                                </div>
-                            `).join("")}
-                        </div>
-                        <button id="pr-more-btn" data-count="${hiddenPRs.length}" onclick="togglePRMore()"
-                                style="width:100%; margin-top:8px; font-size:13px; background:#f0f0f5; color:#333;">
-                            ${prMoreExpanded ? "Weniger anzeigen ▲" : `Mehr anzeigen (${hiddenPRs.length}) ▼`}
-                        </button>
-                    ` : ""}
-                </div>
-            </div>
-        `;
-    } else {
-        prSectionHtml = `<p style="color:#888; margin:0 0 16px;">Noch keine neuen Bestleistungen diesen Monat.</p>`;
-    }
-
-    box.innerHTML = `
-        ${dashboardConfig.stats ? `
-        <div class="insight-stats-grid">
-            <div class="insight-stat-card">
-                <div class="insight-stat-value">💪 <span class="stat-num" data-target="${thisWeekCount}">0</span></div>
-                <div class="insight-stat-label">Diese Woche</div>
-            </div>
-            <div class="insight-stat-card">
-                <div class="insight-stat-value">📅 <span class="stat-num" data-target="${lastWeekCount}">0</span></div>
-                <div class="insight-stat-label">Letzte Woche</div>
-            </div>
-        </div>` : ""}
-
-        ${dashboardConfig.comparison ? `<div class="insight-compare-card">${comparison}</div>` : ""}
-
-        ${dashboardConfig.volume && Object.keys(volByCat).length > 0 ? (() => {
-            const maxSets = Math.max(...Object.values(volByCat));
-            const rows = Object.entries(volByCat)
-                .sort((a, b) => b[1] - a[1])
-                .map(([cat, sets]) => `
-                    <div class="volume-row">
-                        <div class="volume-label">${cat}</div>
-                        <div class="volume-bar-wrap">
-                            <div class="volume-bar" style="width:${Math.round(sets / maxSets * 100)}%"></div>
-                        </div>
-                        <div class="volume-count">${sets}</div>
-                    </div>
-                `).join("");
-            return `<div class="pr-section" style="margin-bottom:14px;">
-                <h3 style="margin:0 0 12px; font-size:16px; color:#333; cursor:default;">📊 Sätze diese Woche</h3>
-                ${rows}
-            </div>`;
-        })() : ""}
-
-        ${dashboardConfig.monthlyPRs ? prSectionHtml : ""}
-
-        ${dashboardConfig.allTimePRs && allTimePRs.length > 0 ? `
-        <div class="pr-section">
-            <div class="pr-header" onclick="toggleAllTimePRs()">
-                <h3>🥇 Bestleistungen aller Zeiten</h3>
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span class="pr-count-badge">${allTimePRs.length}</span>
-                    <span id="arrow-all-time-prs">${allTimePRsCollapsed ? "▸" : "▾"}</span>
-                </div>
-            </div>
-            <div id="all-time-pr-list" style="display:${allTimePRsCollapsed ? "none" : "block"};">
-                ${allTimePRs.map(pr => `
-                    <div class="pr-row" onclick="showExerciseDetail('${pr.id}')">
-                        <div>${pr.name}<br><small style="color:#aaa; font-size:12px;">${pr.category}</small></div>
-                        <div><strong>${pr.weight} kg</strong> <span style="color:#888; font-size:13px;">× ${pr.reps}</span></div>
-                    </div>
-                `).join("")}
-            </div>
-        </div>
-        ` : ""}
-
-        ${dashboardConfig.progression ? `<div class="progression-card">
-            <h3>Progression</h3>
-            ${
-                progression.length === 0
-                ? `<p style="color:#888; margin:0;">Noch keine Progression messbar.</p>`
-                : progression.map((p, idx) => {
-                    if (progressionCollapsed[p.id] === undefined) {
-                        progressionCollapsed[p.id] = false;
-                    }
-                    const collapsed = progressionCollapsed[p.id];
-                    const prBadge = p.isPR ? `<span class="badge-pr">🏆 PR</span>` : "";
-                    const plateauBadge = p.plateau ? `<span class="badge-plateau">⚠️ Plateau</span>` : "";
-
-                    return `
-                        <h4 onclick="toggleProgression('${p.id}')" class="progression-header">
-                            <span>${p.name} ${prBadge}${plateauBadge}</span>
-                            <span class="progression-header-controls">
-                                <button onclick="showExerciseDetail('${p.id}'); event.stopPropagation();"
-                                        style="font-size:12px; padding:3px 8px; margin:0;">Details</button>
-                                <span id="arrow-prog_${p.id}">${collapsed ? "▸" : "▾"}</span>
-                            </span>
-                        </h4>
-                        <div id="prog_${p.id}" style="display:${collapsed ? "none" : "block"}; font-size:13px; color:#555; padding:8px 0 4px;">
-                            Volumen letzte Steigerung: ${p.lastIncrease > 0 ? "+" : ""}${Math.round(p.lastIncrease)} kg·Wdh<br>
-                            Bestes Gewicht: ${p.lastBest} kg${p.allTimeBest > p.lastBest ? ` (Rekord: ${p.allTimeBest} kg)` : ""}<br>
-                            (${p.count} Workouts)
-                            <canvas id="chart_${idx}" height="75" class="mini-chart-canvas"
-                                data-values='${JSON.stringify(p.chartValues)}'></canvas>
-                        </div>
-                    `;
-                }).join("")
-            }
-        </div>` : ""}
-    `;
-
-    progression.forEach((p, idx) => {
-        if (!progressionCollapsed[p.id]) {
-            drawMiniChart(`chart_${idx}`, p.chartValues);
-        }
-    });
-
-    document.querySelectorAll('#insightsBox .stat-num').forEach(el => {
-        animateCountUp(el, parseInt(el.dataset.target));
-    });
-}
-
-// ---------------------------------------------------------
-// DASHBOARD – WEEKLY HISTORY
-// ---------------------------------------------------------
-function renderHistoryGrouped() { renderDashboard(); } // legacy alias
-
-function _renderHistoryGrouped_unused() {
-    const box = document.getElementById("historyBox");
-
-    if (workouts.length === 0) {
-        box.innerHTML = `<p style="color:#888;">Noch keine Workouts gespeichert.</p>`;
-        return;
-    }
-
-    const groups = groupWorkoutsByWeek();
-    const keys = Object.keys(groups).sort().reverse();
-
-    box.innerHTML = keys.map(key => {
-        const list = groups[key];
-        return `
-            <div class="week-box">
-                <h3 onclick="toggleCollapse('week_${key}')">
-                    ${key} <span id="arrow-week_${key}">▾</span>
-                </h3>
-                <div id="week_${key}">
-                    ${list.map(w => `
-                        <div class="history-entry">
-                            <strong>${w.plan}</strong> – ${w.date}${w.duration ? ` · ${w.duration} min` : ""}
-                        </div>
-                    `).join("")}
-                </div>
-            </div>
-        `;
-    }).join("");
-}
-
 // ---------------------------------------------------------
 // WEEKLY INSIGHT HELPERS
 // ---------------------------------------------------------
@@ -2871,13 +2747,19 @@ function getWorkoutsForWeekOf(date) {
 }
 
 function getWorkoutsThisWeek() {
-    return getWorkoutsForWeekOf(new Date());
+    if (dashboardCache && dashboardCache.thisWeek) return dashboardCache.thisWeek;
+    const result = getWorkoutsForWeekOf(new Date());
+    if (dashboardCache) dashboardCache.thisWeek = result;
+    return result;
 }
 
 function getWorkoutsLastWeek() {
+    if (dashboardCache && dashboardCache.lastWeek) return dashboardCache.lastWeek;
     const d = new Date();
     d.setDate(d.getDate() - 7);
-    return getWorkoutsForWeekOf(d);
+    const result = getWorkoutsForWeekOf(d);
+    if (dashboardCache) dashboardCache.lastWeek = result;
+    return result;
 }
 
 function weeklyComparisonText(thisWeek, lastWeek) {
@@ -2967,12 +2849,12 @@ function downloadJSON(obj, filename) {
     downloadBlob(new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" }), filename);
 }
 
-function importAll(json) {
+async function importAll(json) {
     try {
         const data = JSON.parse(json);
 
         if (!data.version) {
-            alert("Ungültiges Backup: Version fehlt.");
+            await alertDialog("Ungültiges Backup: Version fehlt.", "Import fehlgeschlagen");
             return;
         }
 
@@ -2989,11 +2871,11 @@ function importAll(json) {
         save();
         renderAll();
 
-        alert("Backup erfolgreich importiert!");
+        await alertDialog("Backup erfolgreich importiert!", "Import erfolgreich");
 
     } catch (e) {
         console.error("IMPORT FEHLER:", e);
-        alert("Fehler beim Import. Datei ungültig.");
+        await alertDialog("Fehler beim Import. Datei ungültig.", "Import fehlgeschlagen");
     }
 }
 
@@ -3138,8 +3020,13 @@ function mergeWorkouts(importedWorkouts, importedExercises = []) {
 
 
 
-function deleteAllAppData() {
-    const ok = confirm("Willst du wirklich ALLE Daten löschen? Übungen, Kategorien, Pläne, Workouts und Tracking werden unwiderruflich entfernt.");
+async function deleteAllAppData() {
+    const ok = await confirmDialog({
+        message: "Willst du wirklich ALLE Daten löschen?\nÜbungen, Kategorien, Pläne, Workouts und Tracking werden unwiderruflich entfernt.",
+        title: "Alle Daten löschen",
+        confirmLabel: "Alles löschen",
+        danger: true
+    });
     if (!ok) return;
 
     exercises = [];
@@ -3150,7 +3037,7 @@ function deleteAllAppData() {
     localStorage.clear();
 
     renderAll();
-    alert("Alle App-Daten wurden gelöscht.");
+    await alertDialog("Alle App-Daten wurden gelöscht.", "Erledigt");
 }
 
 
@@ -3162,7 +3049,7 @@ function exportCSVWorkouts() {
 
     workouts.forEach(w => {
         w.exercises.forEach(ex => {
-            const exInfo = exercises.find(e => e.id === ex.id);
+            const exInfo = exerciseById.get(ex.id);
             ex.sets.forEach((s, i) => {
                 csv += `${w.date};${w.plan};${exInfo ? exInfo.name : "Unbekannt"};${i + 1};${s.weight};${s.reps}\n`;
             });
@@ -3252,7 +3139,7 @@ function getPRsThisMonth() {
         });
 
         if (maxThisMonth > prevBest) {
-            const exInfo = exercises.find(e => e.id === exerciseId);
+            const exInfo = exerciseById.get(exerciseId);
             prs.push({
                 id: exerciseId,
                 name: exInfo ? exInfo.name : "Unbekannte Übung",
@@ -3299,7 +3186,7 @@ function showPRToast(weight) {
 // EXERCISE DETAIL VIEW
 // ---------------------------------------------------------
 function showExerciseDetail(exerciseId) {
-    const exInfo = exercises.find(e => e.id === exerciseId);
+    const exInfo = exerciseById.get(exerciseId);
     const name = exInfo ? exInfo.name : "Unbekannte Übung";
     const pr = getExercisePR(exerciseId);
     const chartData = getExerciseChartData(exerciseId);
@@ -3317,7 +3204,7 @@ function showExerciseDetail(exerciseId) {
     const estimatedOneRM = calculateOneRM(bestSet.weight, bestSet.reps);
 
     let html = `
-        <h2>${name}</h2>
+        <h2>${esc(name)}</h2>
         <p>🏆 Persönlicher Rekord: <strong>${pr > 0 ? pr + " kg" : "–"}</strong></p>
         ${bestSet.weight > 0 ? `<p style="color:#666; font-size:14px;">Bestes Set: ${bestSet.weight} kg × ${bestSet.reps} Wdh<br>Geschätztes 1RM: <strong>${estimatedOneRM} kg</strong></p>` : ""}
         <hr>
@@ -3345,7 +3232,7 @@ function showExerciseDetail(exerciseId) {
 
             html += `
                 <div class="history-entry">
-                    <strong>${w.date}</strong>${w.plan !== "Freies Training" ? ` – ${w.plan}` : ""}
+                    <strong>${w.date}</strong>${w.plan !== "Freies Training" ? ` – ${esc(w.plan)}` : ""}
                     ${w.duration ? ` <span style="color:#888; font-size:13px;">(${w.duration} min)</span>` : ""}
                     <br><small style="color:#666;">Bestes Set: ${bestSet} kg · Volumen: ${volume} kg·Wdh</small>
                     <ul style="margin:4px 0 0 0; padding-left:16px;">
