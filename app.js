@@ -1,9 +1,21 @@
 ﻿// ---------------------------------------------------------
 // VERSION
 // ---------------------------------------------------------
-const APP_VERSION = "2.10";
+const APP_VERSION = "2.11";
 
 const CHANGELOG = [
+    {
+        version: "2.11",
+        date: "2026-04-27",
+        notes: [
+            "Progression standardmäßig eingeklappt; nur aktuelle PRs werden automatisch geöffnet",
+            "Progression sortiert PRs zuerst und danach nach letzter Trainingseinheit absteigend",
+            "Wochenübersicht als kompakte Wochenkarten mit Trainingszeit, Satzanzahl und Muskelgruppen neu aufgebaut",
+            "Historie mit Suche, Planfilter, Zeitraumfilter und Notizfilter erweitert",
+            "Workout-Details in der Historie klappen direkt unter dem ausgewählten Datensatz auf",
+            "Tracking optisch überarbeitet: aktive Übung, Fortschritt, Eingabefelder, Satzliste und Workout-Liste sind klarer strukturiert"
+        ]
+    },
     {
         version: "2.10",
         date: "2026-04-27",
@@ -1045,8 +1057,8 @@ function buildDashboardSections() {
             ${progression.length === 0
                 ? `<p style="color:#888;margin:0;">Noch keine Progression messbar.</p>`
                 : progression.map((p, idx) => {
-                    if (progressionCollapsed[p.id] === undefined) progressionCollapsed[p.id] = false;
-                    const collapsed     = progressionCollapsed[p.id];
+                    const collapsed     = !p.isPR;
+                    progressionCollapsed[p.id] = collapsed;
                     const prBadge       = p.isPR    ? `<span class="badge-pr">🏆 PR</span>` : "";
                     const plateauBadge  = p.plateau ? `<span class="badge-plateau">⚠️ Plateau</span>` : "";
                     return `
@@ -1071,19 +1083,10 @@ function buildDashboardSections() {
     // WEEKLY HISTORY
     if (dashboardConfig.weeklyHistory) {
         const groups = groupWorkoutsByWeek();
-        const keys = Object.keys(groups).sort().reverse();
+        const keys = Object.keys(groups).sort(compareWeekKeysDesc);
         S.weeklyHistory = `
             <h2 style="font-size:17px;margin:20px 0 10px;">Wochenübersicht</h2>
-            ${keys.map(key => `
-                <div class="week-box">
-                    <h3 onclick="toggleCollapse('week_${key}')">${key} <span id="arrow-week_${key}">▾</span></h3>
-                    <div id="week_${key}">
-                        ${groups[key].map(w => `
-                            <div class="history-entry">
-                                <strong>${esc(w.plan)}</strong> – ${w.date}${w.duration ? ` · ${w.duration} min` : ""}
-                            </div>`).join("")}
-                    </div>
-                </div>`).join("")}`;
+            ${keys.map(key => buildWeeklyHistoryCard(key, groups[key])).join("")}`;
     } else { S.weeklyHistory = ""; }
 
     // CALENDAR
@@ -1134,54 +1137,184 @@ function renderWeeklyHistory() {
 // HISTORIE
 // ---------------------------------------------------------
 function renderHistory() {
+    renderHistoryControls();
+    renderHistoryList(false);
+}
+
+function renderHistoryControls() {
+    const controls = document.getElementById("historyControls");
+    if (!controls) return;
+
+    const currentSearch = document.getElementById("historySearch")?.value || "";
+    const currentPlan = document.getElementById("historyPlanFilter")?.value || "";
+    const currentRange = document.getElementById("historyRangeFilter")?.value || "all";
+    const currentNotes = document.getElementById("historyNotesOnly")?.checked || false;
+    const planOptions = [...new Set(workouts.map(w => w.plan).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b))
+        .map(plan => `<option value="${esc(plan)}" ${plan === currentPlan ? "selected" : ""}>${esc(plan)}</option>`)
+        .join("");
+
+    controls.innerHTML = `
+        <div class="history-filter-card">
+            <input id="historySearch" value="${esc(currentSearch)}" placeholder="Suchen..." oninput="renderHistoryList()" autocomplete="off">
+            <div class="history-filter-row">
+                <select id="historyPlanFilter" onchange="renderHistoryList()">
+                    <option value="">Alle Pläne</option>
+                    ${planOptions}
+                </select>
+                <select id="historyRangeFilter" onchange="renderHistoryList()">
+                    <option value="all" ${currentRange === "all" ? "selected" : ""}>Alle</option>
+                    <option value="month" ${currentRange === "month" ? "selected" : ""}>Dieser Monat</option>
+                    <option value="30" ${currentRange === "30" ? "selected" : ""}>Letzte 30 Tage</option>
+                </select>
+            </div>
+            <label class="history-note-toggle">
+                <input id="historyNotesOnly" type="checkbox" onchange="renderHistoryList()" ${currentNotes ? "checked" : ""}>
+                <span>Nur mit Notiz</span>
+            </label>
+        </div>
+    `;
+}
+
+function renderHistoryList(clearDetails = true) {
     const list = document.getElementById("overviewList");
     const details = document.getElementById("overviewDetails");
+    const search = (document.getElementById("historySearch")?.value || "").toLowerCase().trim();
+    const planFilter = document.getElementById("historyPlanFilter")?.value || "";
+    const rangeFilter = document.getElementById("historyRangeFilter")?.value || "all";
+    const notesOnly = document.getElementById("historyNotesOnly")?.checked || false;
 
     list.innerHTML = "";
-    details.innerHTML = "";
+    if (clearDetails) details.innerHTML = "";
 
     if (workouts.length === 0) {
         list.innerHTML = `<p style="color:#888;">Noch keine Workouts gespeichert.</p>`;
         return;
     }
 
-    const reversed = [...workouts].reverse();
+    const filtered = workouts
+        .map((w, originalIndex) => ({ w, originalIndex }))
+        .filter(({ w }) => workoutMatchesHistoryFilters(w, { search, planFilter, rangeFilter, notesOnly }))
+        .sort((a, b) => {
+            const dateDiff = new Date(b.w.date) - new Date(a.w.date);
+            return dateDiff || b.originalIndex - a.originalIndex;
+        });
 
-    list.innerHTML = reversed.map((w, index) => {
-        const originalIndex = workouts.length - 1 - index;
-        return `
-            <div class="history-card anim-fade-in" style="animation-delay:${index * 0.05}s">
-                <div class="history-card-main" onclick="showWorkoutDetails(${originalIndex})">
-                    <div class="history-card-name">${esc(w.plan)}</div>
-                    <div class="history-card-meta">${w.date}${w.duration ? ` · ${w.duration} min` : ""}</div>
+    if (filtered.length === 0) {
+        list.innerHTML = `<p style="color:#888;">Keine Workouts gefunden.</p>`;
+        return;
+    }
+
+    const groups = {};
+    filtered.forEach(item => {
+        const key = formatHistoryMonth(item.w.date);
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(item);
+    });
+
+    list.innerHTML = Object.entries(groups).map(([month, items]) => `
+        <div class="history-month-group">
+            <div class="history-month-title">${month}</div>
+            ${items.map(({ w, originalIndex }, index) => buildHistoryCard(w, originalIndex, index)).join("")}
+        </div>
+    `).join("");
+}
+
+function workoutMatchesHistoryFilters(w, { search, planFilter, rangeFilter, notesOnly }) {
+    if (planFilter && w.plan !== planFilter) return false;
+    if (notesOnly && !w.note) return false;
+
+    if (rangeFilter !== "all") {
+        const workoutDate = new Date(w.date);
+        const now = new Date();
+        if (rangeFilter === "month") {
+            if (workoutDate.getFullYear() !== now.getFullYear() || workoutDate.getMonth() !== now.getMonth()) return false;
+        } else if (rangeFilter === "30") {
+            const cutoff = new Date();
+            cutoff.setDate(cutoff.getDate() - 30);
+            if (workoutDate < cutoff) return false;
+        }
+    }
+
+    if (!search) return true;
+    const haystack = [
+        w.plan,
+        w.date,
+        w.note || "",
+        ...w.exercises.map(ex => exerciseById.get(ex.id)?.name || "")
+    ].join(" ").toLowerCase();
+    return haystack.includes(search);
+}
+
+function formatHistoryMonth(dateStr) {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return "Ohne Datum";
+    const months = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+    return `${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function buildHistoryCard(w, originalIndex, index) {
+    const setCount = getWorkoutSetCount(w);
+    const exerciseCount = w.exercises.length;
+    const categoryCounts = getWorkoutCategoryCounts(w);
+    const categoryChips = Object.entries(categoryCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4)
+        .map(([cat, count]) => `<span class="history-chip">${esc(cat)} ${count}</span>`)
+        .join("");
+
+    return `
+        <div class="history-card anim-fade-in" data-workout-index="${originalIndex}" style="animation-delay:${Math.min(index, 8) * 0.04}s">
+            <div class="history-card-main" onclick="showWorkoutDetails(${originalIndex})">
+                <div class="history-card-date">${formatWorkoutDay(w.date)}</div>
+                <div class="history-card-name">${esc(w.plan)}</div>
+                <div class="history-card-meta">
+                    ${exerciseCount} Übung${exerciseCount !== 1 ? "en" : ""} · ${setCount} Sätze${w.duration ? ` · ${w.duration} min` : ""}
                 </div>
-                <div class="history-card-actions">
-                    <button class="ex-icon-btn" title="Als Vorlage verwenden" onclick="startFromHistory(${originalIndex})">▶️</button>
-                    <button class="ex-icon-btn" onclick="openWorkoutEditor(${originalIndex})">✏️</button>
-                    <button class="ex-icon-btn" onclick="deleteWorkout(${originalIndex})">🗑️</button>
-                </div>
+                ${categoryChips ? `<div class="history-chip-row">${categoryChips}</div>` : ""}
+                ${w.note ? `<div class="history-note-mark">Notiz vorhanden</div>` : ""}
             </div>
-        `;
-    }).join("");
+            <div class="history-card-actions">
+                <button class="ex-icon-btn" title="Als Vorlage verwenden" onclick="startFromHistory(${originalIndex})">▶️</button>
+                <button class="ex-icon-btn" onclick="openWorkoutEditor(${originalIndex})">✏️</button>
+                <button class="ex-icon-btn" onclick="deleteWorkout(${originalIndex})">🗑️</button>
+            </div>
+        </div>
+        <div id="history_detail_${originalIndex}" class="history-inline-detail"></div>
+    `;
 }
 
 function showWorkoutDetails(index) {
     const w = workouts[index];
-    const details = document.getElementById("overviewDetails");
+    const fallbackDetails = document.getElementById("overviewDetails");
+    const inlineDetails = document.getElementById("history_detail_" + index);
+    const details = inlineDetails || fallbackDetails;
+    const wasOpen = inlineDetails && inlineDetails.innerHTML.trim() !== "";
 
     document.querySelectorAll(".history-card").forEach(c => c.classList.remove("overview-highlight"));
-    const reversedIndex = workouts.length - 1 - index;
-    const card = document.querySelectorAll(".history-card")[reversedIndex];
+    document.querySelectorAll(".history-inline-detail").forEach(d => d.innerHTML = "");
+    if (fallbackDetails) fallbackDetails.innerHTML = "";
+
+    if (wasOpen) return;
+
+    const card = document.querySelector(`.history-card[data-workout-index="${index}"]`);
     if (card) card.classList.add("overview-highlight");
+
+    const totalSets = getWorkoutSetCount(w);
+    const totalVolume = w.exercises.reduce((sum, ex) =>
+        sum + ex.sets.reduce((exSum, s) => exSum + s.weight * s.reps, 0), 0);
+    const cats = Object.keys(getWorkoutCategoryCounts(w)).map(esc).join(" · ");
 
     const exercisesHtml = w.exercises.map(ex => {
         const exInfo = exerciseById.get(ex.id);
+        const bestSet = ex.sets.length ? ex.sets.reduce((best, s) => s.weight > best.weight ? s : best, ex.sets[0]) : null;
         const setsHtml = ex.sets.map((s, i) =>
             `<span class="set-chip">S${i + 1}: ${s.weight}kg × ${s.reps}</span>`
         ).join("");
         return `
             <div class="detail-exercise">
                 <div class="detail-ex-name">${exInfo ? esc(exInfo.name) : "Unbekannte Übung"}</div>
+                ${bestSet ? `<div class="detail-ex-meta">Bestes Set: ${bestSet.weight} kg × ${bestSet.reps}</div>` : ""}
                 <div class="detail-sets">${setsHtml}</div>
             </div>
         `;
@@ -1192,8 +1325,14 @@ function showWorkoutDetails(index) {
             <div class="detail-header">
                 <strong>${esc(w.plan)}</strong>
                 <span class="detail-meta">${w.date}${w.duration ? ` · ${w.duration} min` : ""}</span>
+                <div class="detail-summary-row">
+                    <span>${w.exercises.length} Übungen</span>
+                    <span>${totalSets} Sätze</span>
+                    <span>${Math.round(totalVolume)} kg·Wdh</span>
+                </div>
+                ${cats ? `<div class="detail-category-line">${cats}</div>` : ""}
             </div>
-            ${w.note ? `<div class="detail-exercise"><div class="note-box" style="margin:0;"><strong>Notiz:</strong> ${w.note}</div></div>` : ""}
+            ${w.note ? `<div class="detail-exercise"><div class="note-box" style="margin:0;"><strong>Notiz:</strong> ${esc(w.note)}</div></div>` : ""}
             ${exercisesHtml}
         </div>
     `;
@@ -2132,7 +2271,12 @@ function renderTracking() {
     const exInfo = exerciseById.get(ex.id);
 
     const setsChips = ex.sets.length > 0
-        ? `<div class="tracking-sets">${ex.sets.map((s, i) => `<span class="set-chip" data-set-index="${i}">S${i + 1}: ${s.weight}kg × ${s.reps}</span>`).join("")}</div>`
+        ? `
+            <div class="tracking-set-stack">
+                <div class="tracking-section-label">Gespeicherte Sätze</div>
+                <div class="tracking-sets">${ex.sets.map((s, i) => `<span class="set-chip" data-set-index="${i}">S${i + 1}: ${s.weight}kg × ${s.reps}</span>`).join("")}</div>
+            </div>
+        `
         : "";
 
     const lastSession = getLastSessionData(ex.id);
@@ -2148,9 +2292,16 @@ function renderTracking() {
     const exerciseListHtml = currentTracking.exercises.map((item, idx) => {
         const info = exerciseById.get(item.id);
         const isCurrent = idx === currentExerciseIndex;
+        const stateLabel = isCurrent ? "Aktiv" : idx < currentExerciseIndex ? "Fertig" : `${item.sets.length} Satz${item.sets.length !== 1 ? "e" : ""}`;
         return `
             <div class="tracking-ex-item${isCurrent ? " current" : idx < currentExerciseIndex ? " done" : ""}" data-idx="${idx}">
-                <span>${info ? esc(info.name) : "Unbekannt"}</span>
+                <div class="tracking-ex-item-main">
+                    <span class="tracking-ex-step">${idx + 1}</span>
+                    <div>
+                        <div class="tracking-ex-item-name">${info ? esc(info.name) : "Unbekannt"}</div>
+                        <div class="tracking-ex-item-meta">${stateLabel}</div>
+                    </div>
+                </div>
                 <span class="drag-handle">≡</span>
             </div>
         `;
@@ -2158,15 +2309,24 @@ function renderTracking() {
 
     const eta = getEstimatedTimeRemaining();
     const etaHtml = eta !== null
-        ? `<div style="font-size:11px; color:#aaa; margin-top:3px;">~${Math.ceil(eta / 60)} min übrig</div>`
+        ? `<div class="tracking-eta">~${Math.ceil(eta / 60)} min übrig</div>`
         : "";
+    const progressPercent = Math.round((done / total) * 100);
 
     area.innerHTML = `
-        <div class="tracking-header">
-            <div class="tracking-ex-name">${exInfo ? esc(exInfo.name) : "Unbekannt"}</div>
-            <div style="text-align:right;">
-                <div class="tracking-progress">${done + 1} / ${total}</div>
-                ${etaHtml}
+        <div class="tracking-hero">
+            <div class="tracking-header">
+                <div>
+                    <div class="tracking-section-label">Aktuelle Übung</div>
+                    <div class="tracking-ex-name">${exInfo ? esc(exInfo.name) : "Unbekannt"}</div>
+                </div>
+                <div class="tracking-header-side">
+                    <div class="tracking-progress">${done + 1} / ${total}</div>
+                    ${etaHtml}
+                </div>
+            </div>
+            <div class="tracking-progressbar" aria-hidden="true">
+                <div style="width:${progressPercent}%"></div>
             </div>
         </div>
 
@@ -2195,16 +2355,17 @@ function renderTracking() {
                     </div>
                 </div>
             </div>
-            <button onclick="saveSet()" style="width:100%; margin:10px 0 0;">Satz speichern</button>
+            <button class="tracking-save-btn" onclick="saveSet()">Satz speichern</button>
         </div>
 
         ${setsChips}
 
-        <div style="display:flex; gap:8px;">
-            <button onclick="nextExercise()" style="flex:2; margin:0; background:#34c759;">Nächste Übung →</button>
-            <button onclick="finishWorkoutPrompt()" style="flex:1; margin:0; background:#ff3b30;">Workout Beenden 🛑</button>
+        <div class="tracking-actions">
+            <button class="tracking-next-btn" onclick="nextExercise()">Nächste Übung →</button>
+            <button class="tracking-finish-btn" onclick="finishWorkoutPrompt()">Beenden</button>
         </div>
 
+        <div class="tracking-section-label tracking-list-label">Workout</div>
         <div class="tracking-exercise-list">${exerciseListHtml}</div>
 
         ${addExerciseBlock}
@@ -2521,24 +2682,108 @@ function groupWorkoutsByWeek() {
     return groups;
 }
 
+function compareWeekKeysDesc(a, b) {
+    const pa = a.match(/^(\d+)-KW(\d+)$/);
+    const pb = b.match(/^(\d+)-KW(\d+)$/);
+    if (!pa || !pb) return b.localeCompare(a);
+    const yearDiff = Number(pb[1]) - Number(pa[1]);
+    return yearDiff || Number(pb[2]) - Number(pa[2]);
+}
+
+function getWorkoutSetCount(workout) {
+    return workout.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+}
+
+function getWorkoutCategoryCounts(workout) {
+    const counts = {};
+    workout.exercises.forEach(ex => {
+        const exInfo = exerciseById.get(ex.id);
+        const category = exInfo ? exInfo.category : "Unbekannt";
+        counts[category] = (counts[category] || 0) + ex.sets.length;
+    });
+    return counts;
+}
+
+function formatWorkoutDay(dateStr) {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    const days = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+    return `${days[d.getDay()]} ${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.`;
+}
+
+function buildWeeklyHistoryCard(key, weekWorkouts) {
+    const sorted = [...weekWorkouts].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const totalMinutes = sorted.reduce((sum, w) => sum + (Number(w.duration) || 0), 0);
+    const totalSets = sorted.reduce((sum, w) => sum + getWorkoutSetCount(w), 0);
+    const categoryCounts = {};
+
+    sorted.forEach(w => {
+        Object.entries(getWorkoutCategoryCounts(w)).forEach(([cat, count]) => {
+            categoryCounts[cat] = (categoryCounts[cat] || 0) + count;
+        });
+    });
+
+    const categoryChips = Object.entries(categoryCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([cat, count]) => `<span class="week-chip">${esc(cat)} <strong>${count}</strong></span>`)
+        .join("");
+
+    const detailRows = sorted.map(w => {
+        const setCount = getWorkoutSetCount(w);
+        const exerciseCount = w.exercises.length;
+        const cats = Object.keys(getWorkoutCategoryCounts(w)).slice(0, 3).map(esc).join(" · ");
+        return `
+            <div class="week-workout-row">
+                <div class="week-workout-day">${formatWorkoutDay(w.date)}</div>
+                <div class="week-workout-main">
+                    <div class="week-workout-title">${esc(w.plan)}</div>
+                    <div class="week-workout-meta">
+                        ${exerciseCount} Übung${exerciseCount !== 1 ? "en" : ""} · ${setCount} Sätze${w.duration ? ` · ${w.duration} min` : ""}
+                    </div>
+                    ${cats ? `<div class="week-workout-cats">${cats}</div>` : ""}
+                </div>
+            </div>`;
+    }).join("");
+
+    return `
+        <div class="week-box">
+            <div class="week-card-head" onclick="toggleCollapse('week_${key}')">
+                <div>
+                    <div class="week-title">${key}</div>
+                    <div class="week-summary">
+                        ${sorted.length} Training${sorted.length !== 1 ? "s" : ""} · ${totalMinutes || "–"} min · ${totalSets} Sätze
+                    </div>
+                </div>
+                <span id="arrow-week_${key}" class="week-arrow">▸</span>
+            </div>
+            ${categoryChips ? `<div class="week-chip-row">${categoryChips}</div>` : ""}
+            <div id="week_${key}" class="week-details" style="display:none;">
+                ${detailRows}
+            </div>
+        </div>`;
+}
+
 // ---------------------------------------------------------
 // DASHBOARD – PROGRESSION
 // ---------------------------------------------------------
 function getExerciseProgression() {
     const map = {};
+    const sortedWorkouts = [...workouts].sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    workouts.forEach(w => {
+    sortedWorkouts.forEach(w => {
         w.exercises.forEach(ex => {
             const exInfo = exerciseById.get(ex.id);
             if (!exInfo) return;
 
-            if (!map[ex.id]) map[ex.id] = { name: exInfo.name, volumeValues: [], bestSetValues: [] };
+            if (!map[ex.id]) map[ex.id] = { name: exInfo.name, volumeValues: [], bestSetValues: [], lastDate: "" };
 
             if (ex.sets.length > 0) {
                 const volume = ex.sets.reduce((sum, s) => sum + s.weight * s.reps, 0);
                 const bestSet = Math.max(...ex.sets.map(s => s.weight));
                 map[ex.id].volumeValues.push(volume);
                 map[ex.id].bestSetValues.push(bestSet);
+                map[ex.id].lastDate = w.date;
             }
         });
     });
@@ -2576,6 +2821,8 @@ function getExerciseProgression() {
             count: arr.length,
             values: arr,
             chartValues: bArr,
+            lastDate: entry.lastDate,
+            lastTs: new Date(entry.lastDate).getTime() || 0,
             lastBest,
             allTimeBest,
             isPR,
@@ -2583,7 +2830,11 @@ function getExerciseProgression() {
         });
     });
 
-    return result;
+    return result.sort((a, b) => {
+        if (a.isPR !== b.isPR) return a.isPR ? -1 : 1;
+        const dateDiff = b.lastTs - a.lastTs;
+        return dateDiff || a.name.localeCompare(b.name);
+    });
 }
 
 // ---------------------------------------------------------
