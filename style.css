@@ -1530,6 +1530,7 @@ canvas {
     padding: 14px 16px;
     box-shadow: 0 1px 5px rgba(0,0,0,0.09);
     margin-bottom: 14px;
+    position: relative;
 }
 
 .muscle-map-header {
@@ -1639,6 +1640,41 @@ canvas {
     border-radius: 3px;
     border: 1px solid #ddd;
     flex-shrink: 0;
+}
+
+.muscle-stat-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #f0f0f5;
+}
+
+.muscle-stat-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: #555;
+}
+
+
+
+.muscle-tip {
+    position: absolute;
+    background: rgba(30,30,40,0.88);
+    color: #fff;
+    padding: 7px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.4;
+    pointer-events: none;
+    z-index: 50;
+    white-space: nowrap;
+    transform: translateX(-50%);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+    animation: fadeInScale 0.15s ease;
 }
 
 /* ---------------------------------------------------------

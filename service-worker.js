@@ -1,4 +1,4 @@
-const CACHE = "gym-tracker-cache-v11";
+const CACHE = "gym-tracker-cache-v12";
 const SHELL = [
     "index.html",
     "style.css",

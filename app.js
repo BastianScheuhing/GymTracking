@@ -1,9 +1,21 @@
 ﻿// ---------------------------------------------------------
 // VERSION
 // ---------------------------------------------------------
-const APP_VERSION = "1.2.8";
+const APP_VERSION = "2.9";
 
 const CHANGELOG = [
+    {
+        version: "2.9",
+        date: "2026-04-27",
+        notes: [
+            "Muskelkarte mit anatomisch realistischeren SVG-Formen (Bezier-Kurven)",
+            "Bizeps und Trizeps als separate Muskelgruppen (Vorder-/Rückseite)",
+            "Antippen einer Muskelgruppe zeigt Name und Satzanzahl als Tooltip",
+            "Muskelstatistik unter der Karte zeigt trainierte Gruppen dieser Woche",
+            "Übung im Tracking nur per vollständigem Wischen löschbar (75% der Breite)",
+            "Zoom auf Mobilgeräten wieder deaktiviert"
+        ]
+    },
     {
         version: "1.2.8",
         date: "2026-04-25",
@@ -153,7 +165,9 @@ const DASHBOARD_DEFAULTS = {
 const MUSCLE_GROUPS = [
     { id: "chest",      label: "Brust" },
     { id: "shoulders",  label: "Schultern" },
-    { id: "arms",       label: "Arme" },
+    { id: "biceps",     label: "Bizeps" },
+    { id: "triceps",    label: "Trizeps" },
+    { id: "forearms",   label: "Unterarme" },
     { id: "abs",        label: "Bauch" },
     { id: "back",       label: "Rücken" },
     { id: "legs",       label: "Oberschenkel" },
@@ -165,9 +179,9 @@ const MUSCLE_GROUPS = [
 const MUSCLE_MAP_DEFAULTS = {
     "Brust":      ["chest"],
     "Schultern":  ["shoulders"],
-    "Bizeps":     ["arms"],
-    "Trizeps":    ["arms"],
-    "Unterarme":  ["arms"],
+    "Bizeps":     ["biceps"],
+    "Trizeps":    ["triceps"],
+    "Unterarme":  ["forearms"],
     "Rücken":     ["back"],
     "Bauch":      ["abs"],
     "Core":       ["abs"],
@@ -180,7 +194,13 @@ const MUSCLE_MAP_DEFAULTS = {
 
 function loadMuscleMapping() {
     const saved = localStorage.getItem("muscleCategoryMap");
-    return saved ? JSON.parse(saved) : { ...MUSCLE_MAP_DEFAULTS };
+    const mapping = saved ? JSON.parse(saved) : { ...MUSCLE_MAP_DEFAULTS };
+    for (const cat of Object.keys(mapping)) {
+        if (mapping[cat].includes("arms")) {
+            mapping[cat] = mapping[cat].filter(m => m !== "arms").concat(["biceps", "triceps"]);
+        }
+    }
+    return mapping;
 }
 let dashboardConfig = { ...DASHBOARD_DEFAULTS, ...JSON.parse(localStorage.getItem("dashboardConfig") || "{}") };
 let dashboardOrder  = (() => {
@@ -436,9 +456,11 @@ function addSetChipSwipeListeners() {
 function addExerciseItemSwipeListeners() {
     document.querySelectorAll(".tracking-ex-item").forEach(item => {
         let startX = 0;
+        let itemW = 0;
 
         item.addEventListener("touchstart", e => {
             startX = e.touches[0].clientX;
+            itemW  = item.offsetWidth;
             item.style.transition = "none";
         }, { passive: true });
 
@@ -446,24 +468,25 @@ function addExerciseItemSwipeListeners() {
             const dx = e.touches[0].clientX - startX;
             if (dx < 0) {
                 e.preventDefault();
-                item.style.transform = `translateX(${Math.max(dx, -100)}px)`;
-                const pct = Math.min(Math.abs(dx) / 70, 1);
-                item.style.background = `rgb(${Math.round(255)}, ${Math.round(59 - 59 * pct)}, ${Math.round(48 - 48 * pct)})`;
-                item.style.color = pct > 0.4 ? "#fff" : "";
+                const clamped = Math.max(dx, -itemW);
+                item.style.transform = `translateX(${clamped}px)`;
+                const pct = Math.min(Math.abs(dx) / itemW, 1);
+                item.style.background = `rgb(255, ${Math.round(59 - 59 * pct)}, ${Math.round(48 - 48 * pct)})`;
+                item.style.color = pct > 0.3 ? "#fff" : "";
             }
         }, { passive: false });
 
         item.addEventListener("touchend", e => {
             const dx = e.changedTouches[0].clientX - startX;
-            if (dx < -60) {
+            if (dx < -(itemW * 0.75)) {
                 item.style.transition = "transform 0.18s ease, opacity 0.18s ease";
-                item.style.transform = "translateX(-150px)";
+                item.style.transform = `translateX(-${itemW + 20}px)`;
                 item.style.opacity = "0";
                 setTimeout(() => {
                     deleteTrackingExercise(parseInt(item.dataset.idx));
                 }, 180);
             } else {
-                item.style.transition = "transform 0.2s ease, background 0.2s ease, color 0.2s ease";
+                item.style.transition = "transform 0.22s ease, background 0.22s ease, color 0.22s ease";
                 item.style.transform = "translateX(0)";
                 item.style.background = "";
                 item.style.color = "";
@@ -728,70 +751,138 @@ function getMuscleHeatColor(sets) {
 
 function buildBodySvg(view, muscleSets) {
     const c = k => getMuscleHeatColor(muscleSets[k] || 0);
-    const neutral = "#e4e4eb";
-    const stroke  = "#c8c8d0";
-    const sw = 1;
+    const ms = muscleSets;
+    const neutral = "#e8e8ef";
+    const stroke  = "#c4c4cc";
+    const sw = 0.8;
+    const tip = id => `onclick="showMuscleTip(event,'${id}',${ms[id]||0})" style="cursor:pointer;"`;
 
     if (view === "front") return `
         <svg viewBox="0 0 100 220" width="100%">
-            <!-- Head -->
-            <ellipse cx="50" cy="15" rx="13" ry="14" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
-            <rect x="44" y="28" width="12" height="10" rx="3" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
+            <ellipse cx="50" cy="13" rx="10" ry="12" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M 46,24 L 54,24 L 55,33 L 45,33 Z" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
             <!-- Shoulders -->
-            <ellipse cx="24" cy="44" rx="13" ry="9" fill="${c("shoulders")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <ellipse cx="76" cy="44" rx="13" ry="9" fill="${c("shoulders")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M 28,36 C 16,32 9,39 10,51 C 11,61 20,64 28,62 Z"
+                  fill="${c('shoulders')}" stroke="${stroke}" stroke-width="${sw}" ${tip('shoulders')}/>
+            <path d="M 72,36 C 84,32 91,39 90,51 C 89,61 80,64 72,62 Z"
+                  fill="${c('shoulders')}" stroke="${stroke}" stroke-width="${sw}" ${tip('shoulders')}/>
             <!-- Chest -->
-            <path d="M26,38 Q38,33 50,36 L50,64 Q38,70 26,62 Z" fill="${c("chest")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <path d="M74,38 Q62,33 50,36 L50,64 Q62,70 74,62 Z" fill="${c("chest")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M 28,38 C 32,31 44,30 50,33 L 50,66 C 44,73 30,70 28,65 Z"
+                  fill="${c('chest')}" stroke="${stroke}" stroke-width="${sw}" ${tip('chest')}/>
+            <path d="M 72,38 C 68,31 56,30 50,33 L 50,66 C 56,73 70,70 72,65 Z"
+                  fill="${c('chest')}" stroke="${stroke}" stroke-width="${sw}" ${tip('chest')}/>
             <!-- Abs -->
-            <rect x="42" y="64" width="16" height="44" rx="4" fill="${c("abs")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <line x1="42" y1="79" x2="58" y2="79" stroke="${stroke}" stroke-width="0.8"/>
-            <line x1="42" y1="94" x2="58" y2="94" stroke="${stroke}" stroke-width="0.8"/>
+            <path d="M 44,66 C 42,82 42,96 44,108 L 56,108 C 58,96 58,82 56,66 Z"
+                  fill="${c('abs')}" stroke="${stroke}" stroke-width="${sw}" ${tip('abs')}/>
+            <line x1="44" y1="79" x2="56" y2="79" stroke="${stroke}" stroke-width="0.5" pointer-events="none"/>
+            <line x1="44" y1="91" x2="56" y2="91" stroke="${stroke}" stroke-width="0.5" pointer-events="none"/>
+            <line x1="50" y1="66" x2="50" y2="108" stroke="${stroke}" stroke-width="0.5" pointer-events="none"/>
             <!-- Hip -->
-            <path d="M38,108 Q36,112 35,120 Q50,124 65,120 Q64,112 62,108 Z" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
-            <!-- Upper arms -->
-            <ellipse cx="13" cy="66" rx="7" ry="22" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <ellipse cx="87" cy="66" rx="7" ry="22" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M 36,108 C 32,114 31,122 33,126 C 42,130 58,130 67,126 C 69,122 68,114 64,108 Z"
+                  fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Biceps -->
+            <path d="M 21,57 C 11,64 9,78 12,87 L 18,86 C 16,77 17,63 24,58 Z"
+                  fill="${c('biceps')}" stroke="${stroke}" stroke-width="${sw}" ${tip('biceps')}/>
+            <path d="M 79,57 C 89,64 91,78 88,87 L 82,86 C 84,77 83,63 76,58 Z"
+                  fill="${c('biceps')}" stroke="${stroke}" stroke-width="${sw}" ${tip('biceps')}/>
             <!-- Forearms -->
-            <ellipse cx="10" cy="100" rx="5.5" ry="16" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <ellipse cx="90" cy="100" rx="5.5" ry="16" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M 11,89 C 8,100 9,112 11,118 L 17,116 C 16,108 16,98 17,89 Z"
+                  fill="${c('forearms')}" stroke="${stroke}" stroke-width="${sw}" ${tip('forearms')}/>
+            <path d="M 89,89 C 92,100 91,112 89,118 L 83,116 C 84,108 84,98 83,89 Z"
+                  fill="${c('forearms')}" stroke="${stroke}" stroke-width="${sw}" ${tip('forearms')}/>
             <!-- Quads -->
-            <ellipse cx="36" cy="148" rx="14" ry="26" fill="${c("legs")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <ellipse cx="64" cy="148" rx="14" ry="26" fill="${c("legs")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M 33,124 C 23,138 23,160 27,170 C 31,178 39,178 43,170 C 47,160 47,138 43,124 Z"
+                  fill="${c('legs')}" stroke="${stroke}" stroke-width="${sw}" ${tip('legs')}/>
+            <path d="M 67,124 C 77,138 77,160 73,170 C 69,178 61,178 57,170 C 53,160 53,138 57,124 Z"
+                  fill="${c('legs')}" stroke="${stroke}" stroke-width="${sw}" ${tip('legs')}/>
+            <!-- Knees -->
+            <ellipse cx="35" cy="174" rx="8" ry="5" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
+            <ellipse cx="65" cy="174" rx="8" ry="5" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
             <!-- Calves -->
-            <ellipse cx="35" cy="194" rx="11" ry="19" fill="${c("calves")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <ellipse cx="65" cy="194" rx="11" ry="19" fill="${c("calves")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M 28,178 C 23,192 24,208 28,214 C 32,218 38,218 42,214 C 46,208 45,194 40,178 Z"
+                  fill="${c('calves')}" stroke="${stroke}" stroke-width="${sw}" ${tip('calves')}/>
+            <path d="M 72,178 C 77,192 76,208 72,214 C 68,218 62,218 58,214 C 54,208 55,194 60,178 Z"
+                  fill="${c('calves')}" stroke="${stroke}" stroke-width="${sw}" ${tip('calves')}/>
         </svg>`;
 
     return `
         <svg viewBox="0 0 100 220" width="100%">
-            <!-- Head -->
-            <ellipse cx="50" cy="15" rx="13" ry="14" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
-            <rect x="44" y="28" width="12" height="10" rx="3" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
-            <!-- Traps + upper back -->
-            <path d="M28,36 Q50,30 72,36 L68,64 L32,64 Z" fill="${c("back")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <ellipse cx="50" cy="13" rx="10" ry="12" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M 46,24 L 54,24 L 55,33 L 45,33 Z" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Trapezius -->
+            <path d="M 30,34 C 38,26 62,26 70,34 C 68,48 60,58 50,60 C 40,58 32,48 30,34 Z"
+                  fill="${c('back')}" stroke="${stroke}" stroke-width="${sw}" ${tip('back')}/>
             <!-- Lats -->
-            <path d="M30,62 Q18,80 20,108 L36,108 L36,64 Z" fill="${c("back")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <path d="M70,62 Q82,80 80,108 L64,108 L64,64 Z" fill="${c("back")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <!-- Lower back -->
-            <rect x="36" y="64" width="28" height="44" rx="3" fill="${c("back")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <!-- Upper arms (tricep side) -->
-            <ellipse cx="13" cy="66" rx="7" ry="22" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <ellipse cx="87" cy="66" rx="7" ry="22" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M 30,40 C 16,58 14,82 18,108 L 32,108 L 36,64 Z"
+                  fill="${c('back')}" stroke="${stroke}" stroke-width="${sw}" ${tip('back')}/>
+            <path d="M 70,40 C 84,58 86,82 82,108 L 68,108 L 64,64 Z"
+                  fill="${c('back')}" stroke="${stroke}" stroke-width="${sw}" ${tip('back')}/>
+            <!-- Erectors -->
+            <path d="M 44,60 L 40,108 L 46,108 L 50,60 Z"
+                  fill="${c('back')}" stroke="${stroke}" stroke-width="${sw}" ${tip('back')}/>
+            <path d="M 56,60 L 60,108 L 54,108 L 50,60 Z"
+                  fill="${c('back')}" stroke="${stroke}" stroke-width="${sw}" ${tip('back')}/>
+            <!-- Hip -->
+            <path d="M 36,108 C 32,114 31,122 33,126 C 42,130 58,130 67,126 C 69,122 68,114 64,108 Z"
+                  fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
+            <!-- Triceps -->
+            <path d="M 20,55 C 10,63 9,78 12,87 L 18,86 C 16,77 15,63 22,58 Z"
+                  fill="${c('triceps')}" stroke="${stroke}" stroke-width="${sw}" ${tip('triceps')}/>
+            <path d="M 80,55 C 90,63 91,78 88,87 L 82,86 C 84,77 85,63 78,58 Z"
+                  fill="${c('triceps')}" stroke="${stroke}" stroke-width="${sw}" ${tip('triceps')}/>
             <!-- Forearms -->
-            <ellipse cx="10" cy="100" rx="5.5" ry="16" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <ellipse cx="90" cy="100" rx="5.5" ry="16" fill="${c("arms")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M 11,89 C 8,100 9,112 11,118 L 17,116 C 16,108 16,98 17,89 Z"
+                  fill="${c('forearms')}" stroke="${stroke}" stroke-width="${sw}" ${tip('forearms')}/>
+            <path d="M 89,89 C 92,100 91,112 89,118 L 83,116 C 84,108 84,98 83,89 Z"
+                  fill="${c('forearms')}" stroke="${stroke}" stroke-width="${sw}" ${tip('forearms')}/>
             <!-- Glutes -->
-            <ellipse cx="37" cy="134" rx="14" ry="16" fill="${c("glutes")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <ellipse cx="63" cy="134" rx="14" ry="16" fill="${c("glutes")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M 33,108 C 19,118 17,136 23,146 C 29,154 41,154 47,146 C 52,138 51,124 45,116 C 42,112 38,110 36,108 Z"
+                  fill="${c('glutes')}" stroke="${stroke}" stroke-width="${sw}" ${tip('glutes')}/>
+            <path d="M 67,108 C 81,118 83,136 77,146 C 71,154 59,154 53,146 C 48,138 49,124 55,116 C 58,112 62,110 64,108 Z"
+                  fill="${c('glutes')}" stroke="${stroke}" stroke-width="${sw}" ${tip('glutes')}/>
             <!-- Hamstrings -->
-            <ellipse cx="37" cy="168" rx="12" ry="22" fill="${c("hamstrings")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <ellipse cx="63" cy="168" rx="12" ry="22" fill="${c("hamstrings")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M 25,148 C 19,160 21,176 25,182 C 29,190 37,192 43,186 C 49,178 48,162 44,150 Z"
+                  fill="${c('hamstrings')}" stroke="${stroke}" stroke-width="${sw}" ${tip('hamstrings')}/>
+            <path d="M 75,148 C 81,160 79,176 75,182 C 71,190 63,192 57,186 C 51,178 52,162 56,150 Z"
+                  fill="${c('hamstrings')}" stroke="${stroke}" stroke-width="${sw}" ${tip('hamstrings')}/>
+            <!-- Knees -->
+            <ellipse cx="34" cy="186" rx="8" ry="5" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
+            <ellipse cx="66" cy="186" rx="8" ry="5" fill="${neutral}" stroke="${stroke}" stroke-width="${sw}"/>
             <!-- Calves -->
-            <ellipse cx="36" cy="203" rx="10" ry="14" fill="${c("calves")}" stroke="${stroke}" stroke-width="${sw}"/>
-            <ellipse cx="64" cy="203" rx="10" ry="14" fill="${c("calves")}" stroke="${stroke}" stroke-width="${sw}"/>
+            <path d="M 28,190 C 22,202 23,212 27,216 C 31,219 37,219 41,216 C 45,212 44,202 39,190 Z"
+                  fill="${c('calves')}" stroke="${stroke}" stroke-width="${sw}" ${tip('calves')}/>
+            <path d="M 72,190 C 78,202 77,212 73,216 C 69,219 63,219 59,216 C 55,212 56,202 61,190 Z"
+                  fill="${c('calves')}" stroke="${stroke}" stroke-width="${sw}" ${tip('calves')}/>
         </svg>`;
 }
+
+function showMuscleTip(evt, muscleId, sets) {
+    const existing = document.getElementById("__muscleTip");
+    if (existing) existing.remove();
+
+    const group = MUSCLE_GROUPS.find(g => g.id === muscleId);
+    const label = group ? group.label : muscleId;
+    const level = sets === 0 ? "Kein Training"
+        : sets <= 3  ? `${sets} Sätze – Wenig`
+        : sets <= 9  ? `${sets} Sätze – Mittel`
+        : `${sets} Sätze – Intensiv`;
+
+    const tip = document.createElement("div");
+    tip.id = "__muscleTip";
+    tip.className = "muscle-tip";
+    tip.innerHTML = `<strong>${esc(label)}</strong><br><span>${level}</span>`;
+
+    const card = evt.target.closest(".muscle-map-card");
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    tip.style.left = (evt.clientX - rect.left) + "px";
+    tip.style.top  = (evt.clientY - rect.top - 56) + "px";
+    card.appendChild(tip);
+
+    const remove = () => { tip.remove(); document.removeEventListener("click", remove); };
+    setTimeout(() => document.addEventListener("click", remove), 0);
+}
+
 function buildMuscleMapSection() {
     const weekWorkouts = getWorkoutsThisWeek();
     const mapping = loadMuscleMapping();
@@ -811,6 +902,17 @@ function buildMuscleMapSection() {
         });
     });
 
+    const muscleStatItems = MUSCLE_GROUPS
+        .filter(g => (muscleSets[g.id] || 0) > 0)
+        .map(g => {
+            const n = muscleSets[g.id];
+            const color = getMuscleHeatColor(n);
+            return `<span class="muscle-stat-item">
+                <span class="legend-dot" style="background:${color};"></span>
+                ${esc(g.label)}&nbsp;<strong>${n}</strong>
+            </span>`;
+        }).join("");
+
     return `
         <div class="muscle-map-card">
             <div class="muscle-map-header">
@@ -829,10 +931,11 @@ function buildMuscleMapSection() {
             </div>
             <div class="muscle-map-legend">
                 <span class="legend-item"><span class="legend-dot" style="background:#ebebf0;"></span>Kein</span>
-                <span class="legend-item"><span class="legend-dot" style="background:#b3d1ff;"></span>Wenig</span>
-                <span class="legend-item"><span class="legend-dot" style="background:#ff9500;"></span>Mittel</span>
-                <span class="legend-item"><span class="legend-dot" style="background:#ff3b30;"></span>Intensiv</span>
+                <span class="legend-item"><span class="legend-dot" style="background:#b3d1ff;"></span>Wenig (1–3)</span>
+                <span class="legend-item"><span class="legend-dot" style="background:#ff9500;"></span>Mittel (4–9)</span>
+                <span class="legend-item"><span class="legend-dot" style="background:#ff3b30;"></span>Intensiv (10+)</span>
             </div>
+            ${muscleStatItems ? `<div class="muscle-stat-bar">${muscleStatItems}</div>` : ""}
         </div>`;
 }
 
