@@ -1,10 +1,10 @@
-const CACHE = "gym-tracker-cache-v12";
+const CACHE = "gym-tracker-cache-v13";
 const SHELL = [
     "index.html",
     "style.css",
+    "musclemap-data.js",
     "app.js",
-    "manifest.json",
-    "icon.png"
+    "manifest.json"
 ];
 
 self.addEventListener("install", e => {
