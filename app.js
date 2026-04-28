@@ -1,9 +1,21 @@
 ﻿// ---------------------------------------------------------
 // VERSION
 // ---------------------------------------------------------
-const APP_VERSION = "2.11";
+const APP_VERSION = "2.12";
 
 const CHANGELOG = [
+    {
+        version: "2.12",
+        date: "2026-04-28",
+        notes: [
+            "Dashboard um Heute-Karte mit letztem Training, Wochenstatus, Planvorschlag und wenig trainierten Kategorien erweitert",
+            "Dashboard-Reihenfolge migriert neue Bereiche ohne bestehende Nutzer-Reihenfolge zurückzusetzen",
+            "Pläne zeigen Typ, Muskelgruppen/Kategorien, letzte Nutzung und eine pausenbasierte Zeitkalkulation",
+            "Planzeit nutzt vorhandene Durchschnittsdauer oder schätzt mit 3 Sätzen pro Übung, eingestellter Pausenzeit und Wechselzeit",
+            "Übungen in Plänen können per Hoch-/Runter-Buttons umsortiert werden",
+            "Übungsverwaltung wieder verschlankt und um Anzeige ergänzt, wie oft eine Übung trainiert wurde"
+        ]
+    },
     {
         version: "2.11",
         date: "2026-04-27",
@@ -167,6 +179,7 @@ const CHANGELOG = [
 // DASHBOARD CONFIG
 // ---------------------------------------------------------
 const DASHBOARD_SECTIONS = [
+    { key: "today",         label: "Heute" },
     { key: "stats",         label: "Wochenstatistik" },
     { key: "comparison",    label: "Wochenvergleich" },
     { key: "muscleMap",     label: "Muskelkarte" },
@@ -178,7 +191,7 @@ const DASHBOARD_SECTIONS = [
     { key: "calendar",      label: "Kalender" },
 ];
 const DASHBOARD_DEFAULTS = {
-    stats: true, comparison: true, muscleMap: true, volume: true,
+    today: true, stats: true, comparison: true, muscleMap: true, volume: true,
     monthlyPRs: true, allTimePRs: true, progression: true,
     weeklyHistory: true, calendar: true
 };
@@ -240,6 +253,14 @@ let dashboardOrder  = (() => {
     const saved = JSON.parse(localStorage.getItem("dashboardOrder") || "null");
     const keys  = DASHBOARD_SECTIONS.map(s => s.key);
     if (saved && saved.length === keys.length && keys.every(k => saved.includes(k))) return saved;
+    if (Array.isArray(saved)) {
+        const migrated = [
+            ...keys.filter(k => !saved.includes(k)),
+            ...saved.filter(k => keys.includes(k))
+        ];
+        localStorage.setItem("dashboardOrder", JSON.stringify(migrated));
+        return migrated;
+    }
     return keys;
 })();
 
@@ -945,8 +966,78 @@ function saveMuscleMappingFromPopup() {
     renderDashboard();
 }
 
+function getLastWorkout() {
+    return [...workouts].sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
+}
+
+function getSuggestedPlan() {
+    const usablePlans = plans
+        .map((plan, index) => ({ plan, index, stats: getPlanStats(plan) }))
+        .filter(item => item.stats.exerciseCount > 0);
+    if (!usablePlans.length) return null;
+
+    return usablePlans.sort((a, b) => {
+        if (!a.stats.lastDate && b.stats.lastDate) return -1;
+        if (a.stats.lastDate && !b.stats.lastDate) return 1;
+        return new Date(a.stats.lastDate || 0) - new Date(b.stats.lastDate || 0);
+    })[0];
+}
+
+function getWeeklyCategoryFocus(limit = 4) {
+    const volByCat = getVolumeByCategory();
+    return categories
+        .map(cat => ({ category: cat, sets: volByCat[cat] || 0, label: cat }))
+        .filter(item => item.sets <= 3)
+        .sort((a, b) => a.sets - b.sets || a.label.localeCompare(b.label))
+        .slice(0, limit);
+}
+
+function buildTodayDashboardCard() {
+    const today = new Date();
+    const dayLabel = today.toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit" });
+    const lastWorkout = getLastWorkout();
+    const suggested = getSuggestedPlan();
+    const focus = getWeeklyCategoryFocus();
+    const weekWorkouts = getWorkoutsThisWeek();
+    const weekSets = weekWorkouts.reduce((sum, w) => sum + getWorkoutSetCount(w), 0);
+    const lastText = lastWorkout
+        ? `${esc(lastWorkout.plan)} · ${formatRelativeDate(lastWorkout.date)}`
+        : "Noch kein Training erfasst";
+    const focusHtml = focus.length
+        ? focus.map(item => `<span class="today-chip">${esc(item.label)} ${item.sets}</span>`).join("")
+        : `<span class="today-chip good">Woche wirkt ausgeglichen</span>`;
+    const weekTrainingLabel = `${weekWorkouts.length} Training${weekWorkouts.length !== 1 ? "s" : ""}`;
+
+    return `
+        <div class="today-card">
+            <div class="today-card-head">
+                <div>
+                    <div class="today-label">${esc(dayLabel)}</div>
+                    <div class="today-title">Heute</div>
+                </div>
+                <div class="today-week-pill">${weekTrainingLabel} · ${weekSets} Sätze</div>
+            </div>
+            <div class="today-grid">
+                <div class="today-panel">
+                    <div class="today-panel-label">Letztes Training</div>
+                    <div class="today-panel-value">${lastText}</div>
+                </div>
+                <div class="today-panel highlight">
+                    <div class="today-panel-label">Vorschlag</div>
+                    <div class="today-panel-value">${suggested ? esc(suggested.plan.name) : "Kein startbarer Plan"}</div>
+                    ${suggested ? `<button onclick="startPlanFromCard(${suggested.index})">Plan starten</button>` : ""}
+                </div>
+            </div>
+            <div class="today-focus">
+                <div class="today-panel-label">Wenig trainiert diese Woche</div>
+                <div class="today-chip-row">${focusHtml}</div>
+            </div>
+        </div>`;
+}
+
 function buildDashboardSections() {
     const S = {};
+    S.today = dashboardConfig.today ? buildTodayDashboardCard() : "";
 
     if (workouts.length === 0) {
         S.stats = `<p style="color:#888;">Noch keine Insights verfügbar.</p>`;
@@ -1486,6 +1577,23 @@ function deleteExercise(i) {
     renderPlans();
 }
 
+function getExerciseWorkoutCount(exerciseId) {
+    return workouts.filter(w => w.exercises.some(ex => ex.id === exerciseId)).length;
+}
+
+function formatRelativeDate(dateStr) {
+    if (!dateStr) return "Noch nie";
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const date = new Date(dateStr);
+    date.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((today - date) / 86400000);
+    if (diffDays === 0) return "Heute";
+    if (diffDays === 1) return "Gestern";
+    if (diffDays < 7) return `Vor ${diffDays} Tagen`;
+    return dateStr;
+}
+
 function renderExercises() {
     const list = document.getElementById("exerciseList");
     const searchEl = document.getElementById("exerciseSearch");
@@ -1508,7 +1616,7 @@ function renderExercises() {
     let groupIndex = 0;
     Object.keys(groups).sort().forEach(category => {
         const items = groups[category];
-        const safeId = "exGroup_" + category.replace(/\s+/g, "_");
+        const safeId = "exGroup_" + category.replace(/[^\w-]/g, "_");
         const delay = (groupIndex++ * 0.07).toFixed(2);
         list.innerHTML += `
             <div class="ex-group anim-fade-in" style="animation-delay:${delay}s">
@@ -1518,15 +1626,21 @@ function renderExercises() {
                     <span class="ex-group-count">${items.length}</span>
                 </div>
                 <div id="${safeId}" class="ex-group-items">
-                    ${items.map(({ ex, i }) => `
-                        <div class="ex-item">
-                            <span class="ex-item-name">${esc(ex.name)}</span>
-                            <div class="ex-item-actions">
-                                <button class="ex-icon-btn" onclick="renameExercisePopup('${ex.id}')">✏️</button>
-                                <button class="ex-icon-btn ex-delete" onclick="deleteExercise(${i})">🗑️</button>
+                    ${items.map(({ ex, i }) => {
+                        const workoutCount = getExerciseWorkoutCount(ex.id);
+                        return `
+                            <div class="ex-item">
+                                <div class="ex-item-main">
+                                    <span class="ex-item-name">${esc(ex.name)}</span>
+                                    <span class="ex-usage-pill">${workoutCount}× trainiert</span>
+                                </div>
+                                <div class="ex-item-actions">
+                                    <button class="ex-icon-btn" onclick="renameExercisePopup('${ex.id}')">✏️</button>
+                                    <button class="ex-icon-btn ex-delete" onclick="deleteExercise(${i})">🗑️</button>
+                                </div>
                             </div>
-                        </div>
-                    `).join("")}
+                        `;
+                    }).join("")}
                 </div>
             </div>
         `;
@@ -1603,21 +1717,98 @@ function removeExerciseFromPlan(planIndex, exerciseId) {
     toggleCollapse("plan_" + planIndex);
 }
 
+function moveExerciseInPlan(planIndex, fromIndex, direction) {
+    const plan = plans[planIndex];
+    if (!plan || !Array.isArray(plan.exercises)) return;
+    const toIndex = fromIndex + direction;
+    if (toIndex < 0 || toIndex >= plan.exercises.length) return;
+
+    const [item] = plan.exercises.splice(fromIndex, 1);
+    plan.exercises.splice(toIndex, 0, item);
+    save();
+    renderPlans();
+    toggleCollapse("plan_" + planIndex);
+    highlightPlan(planIndex);
+}
+
+function getPlanStats(plan) {
+    const validExercises = plan.exercises
+        .map(id => exerciseById.get(id))
+        .filter(Boolean);
+    const categoryCounts = {};
+    validExercises.forEach(ex => {
+        categoryCounts[ex.category] = (categoryCounts[ex.category] || 0) + 1;
+    });
+    const planWorkouts = workouts
+        .filter(w => w.plan === plan.name)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+    const workoutsWithDuration = planWorkouts.filter(w => w.duration);
+    const avgDuration = workoutsWithDuration.length
+        ? Math.round(workoutsWithDuration.reduce((sum, w) => sum + w.duration, 0) / workoutsWithDuration.length)
+        : 0;
+    const plannedSets = validExercises.length * 3;
+    const pauseMinutes = restTimerDuration > 0 ? restTimerDuration / 60 : 0;
+    const estimatedDuration = avgDuration || Math.max(20, Math.round(
+        plannedSets * 1.2 +
+        Math.max(0, plannedSets - 1) * pauseMinutes +
+        validExercises.length * 1.5
+    ));
+
+    return {
+        exerciseCount: validExercises.length,
+        categoryCounts,
+        categoryCount: Object.keys(categoryCounts).length,
+        lastDate: planWorkouts[0]?.date || "",
+        duration: estimatedDuration,
+        hasHistory: planWorkouts.length > 0,
+        isEstimatedDuration: !avgDuration
+    };
+}
+
+function getPlanType(name, categoryCounts) {
+    const lower = name.toLowerCase();
+    if (lower.includes("push")) return "Push";
+    if (lower.includes("pull")) return "Pull";
+    if (lower.includes("leg") || lower.includes("bein")) return "Legs";
+    if (lower.includes("upper") || lower.includes("ober")) return "Upper";
+    if (lower.includes("lower") || lower.includes("unter")) return "Lower";
+    if (Object.keys(categoryCounts).length >= 4) return "Full Body";
+    return "Plan";
+}
+
+async function startPlanFromCard(planIndex) {
+    const select = document.getElementById("trackingPlanSelect");
+    if (select) select.value = String(planIndex);
+    await startTracking();
+    if (currentTracking) showPage("tracking");
+}
+
 function renderPlans() {
     const list = document.getElementById("planList");
     const select = document.getElementById("trackingPlanSelect");
 
     list.innerHTML = plans.map((p, i) => {
+        const stats = getPlanStats(p);
+        const planType = getPlanType(p.name, stats.categoryCounts);
+        const categorySummary = Object.entries(stats.categoryCounts)
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .map(([cat, count]) => `<span class="plan-muscle-chip">${esc(cat)} ${count}</span>`)
+            .join("");
         const availableExercises = exercises.filter(ex => !p.exercises.includes(ex.id));
         const exerciseOptions = availableExercises
             .map(ex => `<option value="${ex.id}">${esc(ex.name)}</option>`)
             .join("");
 
-        const chipsHtml = p.exercises.map(exId => {
+        const chipsHtml = p.exercises.map((exId, exIndex) => {
             const ex = exerciseById.get(exId);
             return `
-                <span class="plan-ex-chip">
-                    ${ex ? ex.name : "?"}
+                <span class="plan-ex-chip plan-ex-row">
+                    <span class="plan-ex-number">${exIndex + 1}</span>
+                    <span>${ex ? esc(ex.name) : "?"}</span>
+                    <span class="plan-ex-order-actions">
+                        <button class="plan-order-btn" onclick="moveExerciseInPlan(${i}, ${exIndex}, -1)" ${exIndex === 0 ? "disabled" : ""}>↑</button>
+                        <button class="plan-order-btn" onclick="moveExerciseInPlan(${i}, ${exIndex}, 1)" ${exIndex === p.exercises.length - 1 ? "disabled" : ""}>↓</button>
+                    </span>
                     <button class="cat-chip-delete" onclick="removeExerciseFromPlan(${i}, '${exId}')">×</button>
                 </span>
             `;
@@ -1633,8 +1824,18 @@ function renderPlans() {
         return `
             <div class="plan-card" id="planBox_${i}">
                 <div class="plan-card-header" onclick="toggleCollapse('plan_${i}'); highlightPlan(${i});">
-                    <span class="plan-card-title">${esc(p.name)}</span>
-                    <div style="display:flex; align-items:center; gap:8px;">
+                    <div class="plan-card-main">
+                        <div class="plan-title-row">
+                            <span class="plan-type-chip">${planType}</span>
+                            <span class="plan-card-title">${esc(p.name)}</span>
+                        </div>
+                        <div class="plan-card-meta">
+                            ${stats.exerciseCount} Übung${stats.exerciseCount !== 1 ? "en" : ""} · ${stats.isEstimatedDuration ? "ca." : "Ø"} ${stats.duration} min · ${stats.lastDate ? formatRelativeDate(stats.lastDate) : "Noch nie trainiert"}
+                        </div>
+                        <div class="plan-muscle-row">${categorySummary || `<span class="ex-muted">Noch keine Muskelgruppen</span>`}</div>
+                    </div>
+                    <div class="plan-card-actions">
+                        <button class="plan-start-btn" onclick="startPlanFromCard(${i}); event.stopPropagation();" ${stats.exerciseCount ? "" : "disabled"}>Start</button>
                         <span id="arrow-plan_${i}">▸</span>
                         <button class="ex-icon-btn" onclick="renamePlanPopup(${i}); event.stopPropagation();">✏️</button>
                         <button class="ex-icon-btn" onclick="deletePlan(${i}); event.stopPropagation();">🗑️</button>

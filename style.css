@@ -265,18 +265,34 @@ h3 {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 10px;
     padding: 13px 16px;
     border-top: 1px solid #f2f2f2;
+}
+
+.ex-item-main {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
 }
 
 .ex-item-name {
     font-size: 15px;
     color: #1a1a1a;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.ex-usage-pill {
+    color: #8a8a93;
+    font-size: 12px;
 }
 
 .ex-item-actions {
     display: flex;
     gap: 2px;
+    flex: 0 0 auto;
 }
 
 .ex-icon-btn {
@@ -294,6 +310,11 @@ h3 {
 .ex-icon-btn:active {
     background: #f0f0f0;
     opacity: 1;
+}
+
+.ex-muted {
+    color: #aaa;
+    font-size: 13px;
 }
 
 .ex-cat-section {
@@ -672,6 +693,111 @@ canvas {
 /* ---------------------------------------------------------
    DASHBOARD – STATS GRID
 --------------------------------------------------------- */
+.today-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.09);
+    margin-bottom: 14px;
+}
+
+.today-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.today-label,
+.today-panel-label {
+    color: #8a8a93;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.today-title {
+    color: #1c1c1e;
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-top: 3px;
+}
+
+.today-week-pill {
+    background: #f0f0f5;
+    border-radius: 999px;
+    color: #555;
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 10px;
+}
+
+.today-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.today-panel {
+    background: #f8f8fb;
+    border: 1px solid #eeeef4;
+    border-radius: 10px;
+    padding: 12px;
+    min-width: 0;
+}
+
+.today-panel.highlight {
+    background: #eef7f2;
+    border-color: #d8f0df;
+}
+
+.today-panel-value {
+    color: #1c1c1e;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-top: 5px;
+    overflow-wrap: anywhere;
+}
+
+.today-panel button {
+    background: #34c759;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 10px 0 0;
+    padding: 8px 10px;
+    width: 100%;
+}
+
+.today-focus {
+    margin-top: 12px;
+}
+
+.today-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.today-chip {
+    background: #f0f0f5;
+    border-radius: 999px;
+    color: #555;
+    font-size: 12px;
+    padding: 4px 9px;
+}
+
+.today-chip.good {
+    background: #eef7f2;
+    color: #238a49;
+    font-weight: 700;
+}
+
 .insight-stats-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -711,6 +837,20 @@ canvas {
     font-size: 14px;
     color: #555;
     margin-bottom: 14px;
+}
+
+@media (max-width: 420px) {
+    .today-card-head {
+        flex-direction: column;
+    }
+
+    .today-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .today-week-pill {
+        align-self: flex-start;
+    }
 }
 
 .progression-card {
@@ -1096,14 +1236,81 @@ canvas {
 .plan-card-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    gap: 12px;
     padding: 14px 16px;
     cursor: pointer;
 }
 
+.plan-card-main {
+    min-width: 0;
+    flex: 1;
+}
+
+.plan-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
 .plan-card-title {
     font-size: 16px;
-    font-weight: 600;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.plan-type-chip {
+    flex: 0 0 auto;
+    background: #eef7f2;
+    color: #238a49;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.plan-card-meta {
+    color: #8a8a93;
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+.plan-muscle-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 9px;
+}
+
+.plan-muscle-chip {
+    background: #f0f0f5;
+    border-radius: 999px;
+    color: #555;
+    font-size: 12px;
+    padding: 3px 8px;
+}
+
+.plan-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+.plan-start-btn {
+    margin: 0;
+    padding: 7px 10px;
+    font-size: 13px;
+    font-weight: 700;
+    background: #34c759;
+}
+
+.plan-start-btn:disabled {
+    background: #d1d1d6;
+    color: #fff;
+    opacity: 1;
 }
 
 .plan-card-body {
@@ -1122,10 +1329,75 @@ canvas {
     display: inline-flex;
     align-items: center;
     background: #f0f0f5;
-    border-radius: 20px;
+    border-radius: 10px;
     padding: 5px 8px 5px 12px;
     font-size: 14px;
     gap: 4px;
+}
+
+.plan-ex-row {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 8px 8px 8px 10px;
+}
+
+.plan-ex-row > span:nth-child(2) {
+    flex: 1;
+    overflow-wrap: anywhere;
+}
+
+.plan-ex-order-actions {
+    display: inline-flex;
+    gap: 3px;
+    flex: 0 0 auto;
+}
+
+.plan-order-btn {
+    background: #fff;
+    color: #007aff;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    margin: 0;
+    min-width: 26px;
+    padding: 6px 7px;
+}
+
+.plan-order-btn:disabled {
+    color: #c7c7cc;
+    opacity: 1;
+}
+
+.plan-ex-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    color: #8a8a93;
+    font-size: 12px;
+    font-weight: 800;
+    flex: 0 0 auto;
+}
+
+@media (max-width: 420px) {
+    .plan-card-header {
+        flex-direction: column;
+    }
+
+    .plan-card-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .plan-start-btn {
+        margin-right: auto;
+    }
 }
 
 /* ---------------------------------------------------------
